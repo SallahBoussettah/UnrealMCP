@@ -2,13 +2,13 @@
 
 AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants like Claude create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, and manage levels/maps — all through natural language.
 
-**43 tools** across 8 categories. Fully tested against a live UE5.6 editor.
+**48 tools** across 9 categories. Fully tested against a live UE5.6 editor.
 
 ## Architecture
 
 ```
 Claude Code ──stdio──> Python MCP Server ──TCP:55555──> C++ UE5 Editor Plugin
-                       (43 tools)                       (41 command handlers)
+                       (48 tools)                       (46 command handlers)
                        mcp-server/                      plugin/UnrealMCP/
 ```
 
@@ -51,7 +51,7 @@ Add to your `.claude.json` (or use `claude mcp add`):
 }
 ```
 
-## Tools (43 total)
+## Tools (48 total)
 
 ### Blueprint Tools (8)
 
@@ -190,6 +190,16 @@ Reroute         → node_type="Knot"
 | `remove_streaming_level` | Remove a streaming sub-level from the world | `package_name` |
 | `set_level_visibility` | Show/hide a sub-level, optionally make it the current editing level | `package_name`, `visible`, `make_current` |
 
+### Asset Tools (5)
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `import_asset` | Import external file (FBX, OBJ, PNG, JPG, WAV, etc.) into project | `file_path`, `destination_path`, `asset_name`, `options` (replace_existing, import_materials, generate_collision) |
+| `search_assets` | Search Content Browser by type, path, and name pattern | `path`, `type` (StaticMesh, Texture2D, Material, Blueprint, etc.), `name_pattern`, `recursive`, `max_results` |
+| `get_asset_info` | Get detailed metadata for an asset | `asset_path` → returns name, class, disk_size_bytes, is_dirty, referencers[], dependencies[] |
+| `delete_asset` | Delete asset with reference checking | `asset_path`, `force` (skip reference check) |
+| `rename_asset` | Rename or move asset in Content Browser | `asset_path`, `new_path` (auto-creates redirectors) |
+
 ### Viewport Tools (2)
 
 | Tool | Description | Key Parameters |
@@ -210,6 +220,7 @@ Reroute         → node_type="Knot"
 - **AI-assisted game prototyping** — Describe game mechanics in natural language, let Claude create Blueprints with the right nodes and connections
 - **Automated Blueprint construction** — Programmatically build complex node graphs (health systems, inventory, AI behavior)
 - **Level design assistance** — Create/load/save maps, manage streaming sub-levels, spawn actors, set transforms, assign materials
+- **Asset management** — Import meshes/textures/sounds from disk, search the Content Browser, inspect asset metadata, rename and organize assets
 - **Debugging** — Read console logs, inspect properties, take screenshots to understand editor state
 - **Batch operations** — Spawn dozens of actors or modify properties across many objects in a single command
 
@@ -221,6 +232,7 @@ Reroute         → node_type="Knot"
 - **Properties**: `FProperty::ImportText_Direct()` / `ExportTextItem_Direct()`, `PreEditChange()` / `PostEditChangeProperty()`
 - **Materials**: `UMaterialFactoryNew::FactoryCreateNew()`, `UMaterial::GetEditorOnlyData()`, `UMaterialEditingLibrary`
 - **Levels**: `UEditorLoadingAndSavingUtils` (NewBlankMap, LoadMap), `UEditorLevelUtils` (streaming levels, visibility), `FEditorFileUtils` (save)
+- **Assets**: `UAutomatedAssetImportData` + `ImportAssetsAutomated()`, `IAssetRegistry::GetAssets()`, `UEditorAssetLibrary` (Delete, Rename)
 - **Screenshots**: Win32 `PrintWindow()` with `PW_RENDERFULLCONTENT`, `IImageWrapper` PNG encoding
 - **Thread Safety**: All commands execute on game thread via `AsyncTask(ENamedThreads::GameThread)`, undo support via `FScopedTransaction`
 
@@ -242,7 +254,7 @@ This plugin integrates with UE 5.6's built-in MCP subsystem (`EpicUnrealMCPModul
 UnrealMCP/
   mcp-server/                  # Python MCP server
     src/unreal_mcp/
-      server.py                # Entry point, FastMCP setup (43 tools)
+      server.py                # Entry point, FastMCP setup (48 tools)
       connection.py            # TCP client (4-byte prefix protocol)
       tools/                   # Tool definitions by category
         blueprint.py           #   8 Blueprint tools
@@ -253,11 +265,12 @@ UnrealMCP/
         viewport.py            #   2 Viewport tools
         console.py             #   3 Console tools (incl. batch_execute)
         level.py               #   7 Level tools
+        asset.py               #   5 Asset tools
   plugin/UnrealMCP/            # C++ UE5 editor plugin
     Source/UnrealMCP/
       Private/
         MCPTCPServer.cpp       # TCP listener, command dispatch, batch_execute
-        Commands/              # 41 command handlers by category
+        Commands/              # 46 command handlers by category
           MCPBlueprintCommands.cpp
           MCPNodeGraphCommands.cpp
           MCPActorCommands.cpp
@@ -266,6 +279,7 @@ UnrealMCP/
           MCPViewportCommands.cpp
           MCPConsoleCommands.cpp
           MCPLevelCommands.cpp
+          MCPAssetCommands.cpp
       Public/
         Commands/              # Header files
   screenshots/                 # Saved viewport captures

@@ -8,6 +8,7 @@
 #include "Commands/MCPConsoleCommands.h"
 #include "Commands/MCPMaterialCommands.h"
 #include "Commands/MCPLevelCommands.h"
+#include "Commands/MCPAssetCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -444,6 +445,13 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPAddStreamingLevelCommand>());
 	Register(MakeShared<FMCPRemoveStreamingLevelCommand>());
 	Register(MakeShared<FMCPSetLevelVisibilityCommand>());
+
+	// Asset commands
+	Register(MakeShared<FMCPImportAssetCommand>());
+	Register(MakeShared<FMCPSearchAssetsCommand>());
+	Register(MakeShared<FMCPGetAssetInfoCommand>());
+	Register(MakeShared<FMCPDeleteAssetCommand>());
+	Register(MakeShared<FMCPRenameAssetCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }

@@ -3,8 +3,8 @@
 ## Done
 
 ### Core Infrastructure
-- [x] Python MCP server (stdio transport, 43 tools)
-- [x] C++ UE5 editor plugin (TCP port 55555, 41 command handlers + batch_execute)
+- [x] Python MCP server (stdio transport, 48 tools)
+- [x] C++ UE5 editor plugin (TCP port 55555, 46 command handlers + batch_execute)
 - [x] 4-byte length-prefixed JSON protocol
 - [x] UE 5.6 compatibility (EpicUnrealMCPModule integration, SavePackage API, module structure)
 - [x] TCP reliability (null-terminate buffers, loop partial sends for large payloads)
@@ -12,6 +12,7 @@
 - [x] Batch operations (`batch_execute` - multiple commands in one TCP round-trip)
 - [x] Material tools (create, assign, modify, get_material_info)
 - [x] Level management tools (get_level_info, create_level, save_level, load_level, add/remove streaming levels, visibility)
+- [x] Asset import + Content Browser tools (import_asset, search_assets, get_asset_info, delete_asset, rename_asset)
 - [x] Epic BlueprintGraph utility library (node types, connectors, variables, functions)
 
 ### Bugs Fixed
@@ -19,7 +20,7 @@
 - [x] **Screenshot window detection** - `take_screenshot` failed when editor wasn't the focused window. Fixed with fallback to largest visible regular window.
 - [x] **BlueprintGraph directory nesting** - Double `BlueprintGraph/BlueprintGraph/` path caused include failures. Flattened to single level.
 
-### All 43 Tools Tested & Verified (43/43)
+### All 48 Tools Tested & Verified (48/48)
 
 #### Actor (6/6)
 - [x] `get_actors_in_level` - list actors with class/name/tag filtering
@@ -80,6 +81,13 @@
 - [x] `remove_streaming_level` - remove sub-level from world
 - [x] `set_level_visibility` - show/hide sub-level, optionally make current
 
+#### Asset (5/5)
+- [x] `import_asset` - import external files (FBX, OBJ, PNG, JPG, WAV, etc.) via automated pipeline
+- [x] `search_assets` - search Content Browser by type, path, name pattern
+- [x] `get_asset_info` - metadata, disk size, referencers, dependencies
+- [x] `delete_asset` - delete with reference checking (force option)
+- [x] `rename_asset` - rename/move with auto-redirectors
+
 ## Planned Upgrades
 
 ### Upgrade 1: All Blueprint Node Types (DONE)
@@ -95,14 +103,14 @@ Expanded `add_node` from 8 to 43 node types covering all major K2Node categories
 - **Misc** (7): Timeline, Knot, LoadAsset, EaseFunction, GetClassDefaults, GetDataTableRow, CommutativeAssociativeBinaryOperator
 - **Functions/Events/Variables** (6): CallFunction, Event, CustomEvent, Self, VariableGet, VariableSet
 
-### Upgrade 2: Compilation Error Details
-Enhance `compile_blueprint` to return specific error locations — which node, which pin, what the error is. This enables an AI auto-fix loop: create → compile → read errors → fix → recompile. Currently only returns `has_errors: true/false`.
+### Upgrade 2: Compilation Error Details (DONE)
+Enhanced `compile_blueprint` to return per-node error/warning details: node_id, node_title, node_class, graph name, error message, severity, and position. Enables AI auto-fix loop: create → compile → read errors → fix → recompile.
 
 ### Upgrade 3: Level Management (DONE)
 Added 7 level management tools: get_level_info, create_level, save_level, load_level, add_streaming_level, remove_streaming_level, set_level_visibility. Supports blank/template map creation, Save/Save As/Save All, loading maps, and full streaming sub-level management (add, remove, visibility, make current).
 
-### Upgrade 4: Asset Import + Content Browser
-Import meshes, textures, and sounds from disk paths into the project. Search and browse existing project assets in the Content Browser. Lets AI work with real art assets, not just primitives.
+### Upgrade 4: Asset Import + Content Browser (DONE)
+Added 5 asset management tools: import_asset (automated pipeline for FBX/OBJ/PNG/JPG/WAV/etc.), search_assets (Content Browser search by type/path/name), get_asset_info (metadata, references, disk size), delete_asset (with reference checking), rename_asset (rename/move with redirectors).
 
 ### Upgrade 5: Play-in-Editor (PIE) Control
 Start/stop Play-in-Editor sessions so AI can test what it built and read runtime logs to debug gameplay issues. Close the feedback loop between building and testing.
