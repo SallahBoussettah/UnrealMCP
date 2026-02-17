@@ -15,6 +15,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/GameModeBase.h"
 #include "UObject/SavePackage.h"
+#include "Logging/TokenizedMessage.h"
 
 static UBlueprint* LoadBlueprintFromPath(const FString& AssetPath)
 {
@@ -232,6 +233,46 @@ TSharedPtr<FJsonObject> FMCPCompileBlueprintCommand::Execute(const TSharedPtr<FJ
 		BP->Status == BS_Error ? TEXT("Error") :
 		BP->Status == BS_UpToDate ? TEXT("UpToDate") :
 		TEXT("Dirty"));
+
+	// Collect detailed compilation messages from all graphs and nodes
+	TArray<TSharedPtr<FJsonValue>> Errors;
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+
+	TArray<UEdGraph*> AllGraphs;
+	BP->GetAllGraphs(AllGraphs);
+
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (Node->bHasCompilerMessage && !Node->ErrorMsg.IsEmpty())
+			{
+				TSharedPtr<FJsonObject> MsgInfo = MakeShared<FJsonObject>();
+				MsgInfo->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString());
+				MsgInfo->SetStringField(TEXT("node_title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+				MsgInfo->SetStringField(TEXT("node_class"), Node->GetClass()->GetName());
+				MsgInfo->SetStringField(TEXT("graph"), Graph->GetName());
+				MsgInfo->SetStringField(TEXT("message"), Node->ErrorMsg);
+				MsgInfo->SetNumberField(TEXT("pos_x"), Node->NodePosX);
+				MsgInfo->SetNumberField(TEXT("pos_y"), Node->NodePosY);
+
+				// ErrorType maps to EMessageSeverity::Type (0=CriticalError, 1=Error, 2=PerfWarning, 3=Warning, 4=Info)
+				bool bIsError = Node->ErrorType <= EMessageSeverity::Error;
+				MsgInfo->SetStringField(TEXT("severity"), bIsError ? TEXT("Error") : TEXT("Warning"));
+
+				if (bIsError)
+					Errors.Add(MakeShared<FJsonValueObject>(MsgInfo));
+				else
+					Warnings.Add(MakeShared<FJsonValueObject>(MsgInfo));
+			}
+		}
+	}
+
+	Data->SetArrayField(TEXT("errors"), Errors);
+	Data->SetArrayField(TEXT("warnings"), Warnings);
+	Data->SetNumberField(TEXT("error_count"), Errors.Num());
+	Data->SetNumberField(TEXT("warning_count"), Warnings.Num());
+
 	return SuccessResponse(Data);
 }
 

@@ -82,13 +82,19 @@ def register_blueprint_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def compile_blueprint(asset_path: str) -> str:
-        """Compile a Blueprint to validate and apply changes.
+        """Compile a Blueprint and return detailed error/warning information.
+
+        Returns status plus per-node error details including node_id, graph name,
+        error message, severity, and node position. Use this to find and fix
+        compilation issues programmatically.
 
         Args:
             asset_path: Full asset path of the Blueprint to compile
 
         Returns:
-            Compilation result with success status and any error messages
+            JSON with: name, status (Error/UpToDate/Dirty), has_errors, error_count,
+            warning_count, errors[] and warnings[] arrays. Each error/warning contains:
+            node_id, node_title, node_class, graph, message, severity, pos_x, pos_y.
         """
         result = await send_command("compile_blueprint", {
             "asset_path": asset_path,

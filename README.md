@@ -60,7 +60,7 @@ Add to your `.claude.json` (or use `claude mcp add`):
 | `create_blueprint` | Create a new Blueprint class | `name`, `parent_class` (Actor, Pawn, Character, GameModeBase, PlayerController, ActorComponent, SceneComponent), `path` |
 | `list_blueprints` | List all Blueprint assets in a directory | `path`, `recursive` |
 | `get_blueprint_info` | Get full Blueprint structure | `asset_path` → returns variables, functions, components, event graphs, parent class |
-| `compile_blueprint` | Compile and validate changes | `asset_path` → returns success status and errors |
+| `compile_blueprint` | Compile with detailed error diagnostics | `asset_path` → returns status, error_count, warning_count, errors[] and warnings[] with per-node details (node_id, graph, message, severity, position) |
 | `delete_blueprint` | Delete a Blueprint asset | `asset_path` |
 | `add_blueprint_variable` | Add a typed member variable | `asset_path`, `variable_name`, `variable_type` (Boolean, Byte, Integer, Integer64, Float, Double, String, Text, Name, Vector, Rotator, Transform, Object, Class), `default_value`, `category`, `is_instance_editable` |
 | `remove_blueprint_variable` | Remove a member variable | `asset_path`, `variable_name` |
