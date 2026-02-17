@@ -1,254 +1,108 @@
-# UnrealMCP - Progression & Setup Guide
+# UnrealMCP - Progress Tracker
 
-## Quick Start Checklist
+## Done
 
-### Phase 0: Setup (Do This First)
+### Core Infrastructure
+- [x] Python MCP server (stdio transport, 36 tools)
+- [x] C++ UE5 editor plugin (TCP port 55555, 34 command handlers + batch_execute)
+- [x] 4-byte length-prefixed JSON protocol
+- [x] UE 5.6 compatibility (EpicUnrealMCPModule integration, SavePackage API, module structure)
+- [x] TCP reliability (null-terminate buffers, loop partial sends for large payloads)
+- [x] Full editor viewport screenshots (Win32 PrintWindow + fallback window detection)
+- [x] Batch operations (`batch_execute` - multiple commands in one TCP round-trip)
+- [x] Material tools (create, assign, modify, get_material_info)
+- [x] Epic BlueprintGraph utility library (node types, connectors, variables, functions)
 
-- [x] Project structure created
-- [x] Python MCP server code written (31 tools)
-- [x] C++ UE5 plugin code written (29 commands)
-- [x] Git repo initialized
-- [x] DESIGN.md documented
-- [x] **Python environment setup** (venv + `pip install -e .` done)
-- [x] **UE5 plugin installed** (compiled for UE 5.6, MCP_TEST project)
-- [x] **Claude Code config updated** (`.claude.json` - old unrealMCP disabled, new UnrealMCP active)
-- [x] **Basic connectivity test** (MCP server <-> UE5 plugin - ALL PASSING)
+### Bugs Fixed
+- [x] **Node GUID bug** - `add_node` returned `00000000...` for all created nodes. Fixed by deferring GUID assignment to after `AddNode`/`AllocateDefaultPins` and using `FGuid::NewGuid()` fallback.
+- [x] **Screenshot window detection** - `take_screenshot` failed when editor wasn't the focused window. Fixed with fallback to largest visible regular window.
+- [x] **BlueprintGraph directory nesting** - Double `BlueprintGraph/BlueprintGraph/` path caused include failures. Flattened to single level.
 
-### Bugs Fixed During Setup
-- `FastMCP` API: `description=` -> `instructions=` (MCP SDK v1.26.0)
-- Removed dead modules: `EditorStyle`, `SubobjectDataInterface` (don't exist in UE 5.6)
-- Added missing includes: `Character.h`, `GameModeBase.h`, `SavePackage.h`
-- `SavePackage` API: now requires `FSavePackageArgs` struct (UE 5.6)
-- `SpawnActor` API: takes references not pointers in UE 5.6
-- `AddFunctionGraph`: needs explicit `<UClass>` template param
-- `LogObj` variable: renamed to avoid shadowing UE global `LogObj`
-- TCP `ReadMessage`: null-terminate buffer to prevent JSON parse failures
-- TCP `SendResponse`: loop partial sends for large payloads (screenshots)
-- Viewport screenshot: use level editor viewport client, not `GetActiveViewport()`
-- Screenshot tool: auto-saves PNG to `screenshots/` folder instead of returning raw base64
-- Viewport `ReadPixels`: needs `FlushRenderingCommands()` + `Viewport->Invalidate()` before capture
-- Added `RenderCore` module dependency for `FlushRenderingCommands()`
+### All 36 Tools Tested & Verified (36/36)
 
----
+#### Actor (6/6)
+- [x] `get_actors_in_level` - list actors with class/name/tag filtering
+- [x] `find_actors` - search by name substring
+- [x] `spawn_actor` - spawn with class or blueprint path, full transform
+- [x] `delete_actor` - remove from level
+- [x] `set_actor_transform` - position, rotation, scale (partial updates supported)
+- [x] `duplicate_actor` - clone with offset
 
-## Setup Instructions
+#### Blueprint (8/8)
+- [x] `create_blueprint` - create BP class (Actor, Pawn, Character, etc.)
+- [x] `list_blueprints` - list assets in directory, recursive
+- [x] `get_blueprint_info` - variables, functions, components, graphs
+- [x] `compile_blueprint` - compile and report status/errors
+- [x] `delete_blueprint` - remove asset
+- [x] `add_blueprint_variable` - add typed variable with category and defaults
+- [x] `remove_blueprint_variable` - remove variable
+- [x] `add_blueprint_component` - add component to hierarchy with transform
 
-### Step 1: Python MCP Server Setup
+#### Node Graph (8/8)
+- [x] `add_node` - 43 node types across 10 categories (functions, events, variables, flow control, switch, casting, structs, containers, spawning, delegates, text, misc)
+- [x] `get_graph_nodes` - all nodes with IDs, pins, connections, positions
+- [x] `connect_pins` - connect by node GUID and pin name
+- [x] `disconnect_pins` - break all connections on a pin
+- [x] `delete_node` - remove from graph
+- [x] `set_pin_value` - set default values on pins
+- [x] `create_function` - new function with typed inputs/outputs
+- [x] `delete_function` - remove function graph
 
-```bash
-# Navigate to the MCP server directory
-cd D:/mcp-servers/UnrealMCP/mcp-server
+#### Property (5/5)
+- [x] `get_object_properties` - full property list (Details Panel equivalent)
+- [x] `set_object_property` - set with PreEditChange/PostEditChange, dot-notation
+- [x] `get_component_hierarchy` - component tree with types
+- [x] `get_class_defaults` - CDO property values
+- [x] `set_component_property` - set property on specific component
 
-# Create virtual environment
-python -m venv .venv
+#### Material (4/4)
+- [x] `create_material` - create with base color, roughness, metallic
+- [x] `assign_material` - apply to mesh component by slot
+- [x] `modify_material` - update expressions (base) or parameters (instances)
+- [x] `get_material_info` - parameters, expressions, parent material
 
-# Activate it (Windows)
-.venv/Scripts/activate
+#### Viewport (2/2)
+- [x] `take_screenshot` - capture editor window as PNG (base64 transport)
+- [x] `focus_viewport` - camera to actor or world location
 
-# Install the package in editable mode
-pip install -e .
-```
+#### Console (3/3)
+- [x] `get_console_logs` - filtered by verbosity/category, timestamped
+- [x] `execute_console_command` - run any console command
+- [x] `batch_execute` - multiple commands in single TCP round-trip
 
-After install, verify it works:
-```bash
-# Should print help/version or start the server
-unreal-mcp
-# Or run directly:
-python -m unreal_mcp.server
-```
+## Planned Upgrades
 
-### Step 2: UE5 Plugin Installation
+### Upgrade 1: All Blueprint Node Types (DONE)
+Expanded `add_node` from 8 to 43 node types covering all major K2Node categories:
+- **Flow Control** (7): Branch, Sequence, MultiGate, Select, DoOnceMultiInput, MacroInstance (ForLoop/DoOnce/WhileLoop/Gate/FlipFlop/DoN/IsValid), ForEachElementInEnum
+- **Switch** (4): SwitchInteger, SwitchString, SwitchName, SwitchEnum
+- **Casting** (2): DynamicCast, ClassDynamicCast
+- **Structs** (3): MakeStruct, BreakStruct, SetFieldsInStruct
+- **Containers** (4): MakeArray, MakeMap, MakeSet, GetArrayItem
+- **Spawning** (3): SpawnActorFromClass, GenericCreateObject, AddComponentByClass
+- **Delegates** (5): CreateDelegate, AddDelegate, RemoveDelegate, CallDelegate, ClearDelegate
+- **Text** (2): FormatText, EnumLiteral
+- **Misc** (7): Timeline, Knot, LoadAsset, EaseFunction, GetClassDefaults, GetDataTableRow, CommutativeAssociativeBinaryOperator
+- **Functions/Events/Variables** (6): CallFunction, Event, CustomEvent, Self, VariableGet, VariableSet
 
-1. Copy the `plugin/UnrealMCP` folder into your UE5 project's `Plugins/` directory:
-   ```
-   D:\UnrealEngine Projects\ForgeAndFrontier\Plugins\UnrealMCP\
-   ```
+### Upgrade 2: Compilation Error Details
+Enhance `compile_blueprint` to return specific error locations — which node, which pin, what the error is. This enables an AI auto-fix loop: create → compile → read errors → fix → recompile. Currently only returns `has_errors: true/false`.
 
-2. Open your UE5 project (5.6+) - the plugin should auto-compile
+### Upgrade 3: Level Management
+Add tools for creating, saving, and loading levels/maps. Manage sub-levels and world partition. Lets AI set up complete game worlds with multiple areas.
 
-3. Enable the plugin:
-   - Edit > Plugins > search "UnrealMCP" > enable it
-   - Restart the editor if prompted
+### Upgrade 4: Asset Import + Content Browser
+Import meshes, textures, and sounds from disk paths into the project. Search and browse existing project assets in the Content Browser. Lets AI work with real art assets, not just primitives.
 
-4. Verify: check the Output Log for:
-   ```
-   LogMCP: MCP TCP Server started on port 55555
-   ```
+### Upgrade 5: Play-in-Editor (PIE) Control
+Start/stop Play-in-Editor sessions so AI can test what it built and read runtime logs to debug gameplay issues. Close the feedback loop between building and testing.
 
-### Step 3: Claude Code Configuration
+## Future Roadmap
 
-The `.claude.json` at `C:\Users\SALAH\.claude.json` should have:
-- The old `unrealMCP` entry disabled (`"disabled": true`)
-- A new `UnrealMCP` entry pointing to our server
-
-```json
-"UnrealMCP": {
-  "command": "D:/mcp-servers/UnrealMCP/mcp-server/.venv/Scripts/python.exe",
-  "args": [
-    "-m",
-    "unreal_mcp.server"
-  ],
-  "cwd": "D:/mcp-servers/UnrealMCP/mcp-server",
-  "disabled": false
-}
-```
-
-### Step 4: Connectivity Test
-
-1. Open UE5 project with the plugin enabled
-2. Start Claude Code in any project
-3. Claude should see the UnrealMCP tools (31 tools)
-4. Try: "List all actors in the level" or "Take a viewport screenshot"
-
----
-
-## Feature Progression
-
-### MVP (Current Implementation)
-
-| # | Feature Area | Tools | Status |
-|---|-------------|-------|--------|
-| 1 | **Blueprint CRUD** | create, list, get_info, compile, delete, add_variable, remove_variable, add_component | Code Written |
-| 2 | **Node Graph Editing** | add_node (18 types), connect_pins, disconnect_pins, delete_node, get_graph_nodes, set_pin_value, create_function, delete_function | Code Written |
-| 3 | **Property Inspection** | get_object_properties, set_object_property, get_component_hierarchy, get_class_defaults, set_component_property | Code Written |
-| 4 | **Actor Management** | spawn_actor, delete_actor, set_actor_transform, get_actors_in_level, find_actors, duplicate_actor | Code Written |
-| 5 | **Viewport** | take_screenshot, focus_viewport | Code Written |
-| 6 | **Console Logs** | get_console_logs, execute_console_command | Code Written |
-
-**Total: 31 MCP tools, 29 C++ command handlers**
-
-### Test Results (2026-02-17)
-
-| Tool | Status | Notes |
-|------|--------|-------|
-| `get_actors_in_level` | PASS | Returned 70+ actors from ThirdPerson template |
-| `get_console_logs` | PASS | Returned log entries with timestamps |
-| `create_blueprint` | PASS | Created BP_TestActor at /Game/Blueprints |
-| `get_blueprint_info` | PASS | Returned variables, functions, components, graphs |
-| `spawn_actor` | PASS | Spawned PointLight at [0,0,500] |
-| `take_screenshot` | PASS | Saves PNG to screenshots/ folder |
-| `compile_blueprint` | Not tested yet | |
-| `add_node` / `connect_pins` | Not tested yet | |
-| `get_object_properties` | Not tested yet | |
-
-### Testing Priority (Remaining)
-
-1. **Property inspection** - Read/write properties on spawned actors
-2. **Node graph** - Add nodes, connect pins, read graph structure
-3. **Blueprint variables/components** - Add variables, add components
-4. **Delete/duplicate** - Delete actors, duplicate actors
-5. **Console command execution** - Run console commands
-
----
-
-## Phase 1: Hardening & Bug Fixes
-
-After the MVP is tested end-to-end:
-
-- [ ] Fix compilation errors in C++ plugin (if any)
-- [ ] Fix TCP connection edge cases (disconnects, timeouts)
-- [ ] Add proper error messages for common failures
-- [ ] Test all 31 tools and fix issues found
-- [ ] Add connection health check / ping-pong command
-- [ ] Handle case where UE5 editor isn't running gracefully
-
-## Phase 2: Enhanced Blueprint Editing
-
-- [ ] Support more node types (ForEachLoop, Timeline, Delay, SpawnActor, etc.)
-- [ ] Add function parameters (input/output pins)
-- [ ] Support local variables in functions
-- [ ] Read/write macro graphs
-- [ ] Duplicate blueprints with rename
-- [ ] Reparent blueprint classes
-- [ ] Support Widget Blueprints (UMG)
-- [ ] Support Animation Blueprints
-- [ ] Blueprint diff/comparison
-
-## Phase 3: Advanced Features
-
-- [ ] **Material editing** - Create/modify material graphs
-- [ ] **Level streaming** - Load/unload sublevels
-- [ ] **Asset management** - Import/export assets, texture assignment
-- [ ] **Data table editing** - Read/write data tables
-- [ ] **Sequencer** - Basic timeline/cinematic control
-- [ ] **Physics** - Set collision profiles, physics materials
-- [ ] **AI/Navigation** - NavMesh, behavior tree basics
-- [ ] **Audio** - Sound cue assignment, attenuation settings
-
-## Phase 4: AI-Optimized Workflows
-
-- [ ] **Batch operations** - Execute multiple commands atomically
-- [ ] **Blueprint templates** - Pre-made patterns (health system, inventory, etc.)
-- [ ] **Smart suggestions** - Context-aware tool recommendations
-- [ ] **Undo groups** - Multi-step undo as single transaction
-- [ ] **Project analysis** - Full project structure scan for AI context
-- [ ] **Error diagnosis** - Parse compilation errors and suggest fixes
-
-## Phase 5: Production Polish
-
-- [ ] **Authentication** - Secure TCP connection
-- [ ] **Multiple clients** - Support concurrent AI connections
-- [ ] **Configuration file** - Port, log level, feature toggles
-- [ ] **Performance profiling** - Track command execution times
-- [ ] **Documentation** - Full API reference with examples
-- [ ] **Automated tests** - Python unit tests + UE5 automation tests
-- [ ] **CI/CD** - GitHub Actions for Python linting/testing
-- [ ] **Package distribution** - PyPI for MCP server, Marketplace for plugin
-
----
-
-## Known Limitations (MVP)
-
-1. **Single connection** - Only one AI client at a time
-2. **No authentication** - Local-only TCP connection (localhost)
-3. **Game thread blocking** - Commands execute synchronously on game thread
-4. **No streaming** - Large responses (screenshots) sent as single message
-5. **Limited node types** - 8 node types (expandable to 50+)
-6. **No nested struct editing** - Property system handles flat properties only
-7. **Windows only** - TCP server code is cross-platform, but tested on Windows only
-
----
-
-## File Locations
-
-| What | Path |
-|------|------|
-| MCP Server | `D:/mcp-servers/UnrealMCP/mcp-server/` |
-| Python entry point | `mcp-server/src/unreal_mcp/server.py` |
-| TCP connection | `mcp-server/src/unreal_mcp/connection.py` |
-| Tool definitions | `mcp-server/src/unreal_mcp/tools/*.py` |
-| UE5 Plugin | `plugin/UnrealMCP/` |
-| Plugin descriptor | `plugin/UnrealMCP/UnrealMCP.uplugin` |
-| TCP server (C++) | `plugin/.../Private/MCPTCPServer.cpp` |
-| Command handlers | `plugin/.../Private/Commands/*.cpp` |
-| Headers | `plugin/.../Public/Commands/*.h` |
-| Architecture doc | `DESIGN.md` |
-| This file | `progression.md` |
-
----
-
-## Debugging Tips
-
-### MCP Server won't start
-```bash
-# Test manually
-cd D:/mcp-servers/UnrealMCP/mcp-server
-.venv/Scripts/python.exe -m unreal_mcp.server
-# Should start and wait for MCP protocol on stdin
-```
-
-### Can't connect to UE5
-- Check UE5 Output Log for "MCP TCP Server started on port 55555"
-- Try: `telnet localhost 55555` (should connect)
-- Check Windows Firewall isn't blocking port 55555
-- Make sure only one UE5 editor instance is running
-
-### Tools not showing in Claude Code
-- Restart Claude Code after updating `.claude.json`
-- Check the MCP server entry isn't set to `"disabled": true`
-- Run `claude mcp list` to verify registered servers
-
-### Command execution fails
-- Check UE5 Output Log for error messages
-- Commands run on game thread - heavy operations may cause brief editor freeze
-- Blueprint operations require the asset to be loaded in memory
+- **Landscape/terrain tools** - basic terrain editing, foliage placement
+- **Lighting setup** - light types, lightmap settings, post-process volumes
+- **Widget/UMG Blueprint support** - create UI widgets
+- **Animation Blueprint support** - state machines, blend spaces
+- **Data tables / structs** - data-driven content
+- **Navigation mesh / AI** - navmesh, AI controllers
+- **Multi-platform testing** - macOS, Linux support

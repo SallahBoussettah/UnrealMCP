@@ -33,6 +33,10 @@ public class UnrealMCP : ModuleRules
 			"JsonUtilities",
 			"ImageWrapper",
 			"RenderCore",
+			"MaterialEditor",
+			"EditorSubsystem",
+			"HTTP",
+			"EditorFramework",
 		});
 	}
 }

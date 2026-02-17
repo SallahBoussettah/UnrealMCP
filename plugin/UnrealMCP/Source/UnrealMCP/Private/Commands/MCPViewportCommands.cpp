@@ -11,6 +11,7 @@
 #include "IImageWrapper.h"
 #include "RenderingThread.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWindow.h"
 
 #include "Windows/AllowWindowsPlatformTypes.h"
 #include <Windows.h>
@@ -27,11 +28,33 @@ TSharedPtr<FJsonObject> FMCPTakeScreenshotCommand::Execute(const TSharedPtr<FJso
 		return ErrorResponse(TEXT("No editor available"));
 	}
 
-	// Get the main editor window
+	// Get the main editor window - try active first, then fall back to searching
+	// all visible windows (handles the case where another app like Claude Code has focus)
 	TSharedPtr<SWindow> MainWindow = FSlateApplication::Get().GetActiveTopLevelRegularWindow();
 	if (!MainWindow.IsValid())
 	{
-		return ErrorResponse(TEXT("No active editor window found"));
+		// Fallback: find the largest visible regular window (the main editor frame)
+		TArray<TSharedRef<SWindow>> AllWindows;
+		FSlateApplication::Get().GetAllVisibleWindowsOrdered(AllWindows);
+
+		float LargestArea = 0.f;
+		for (const TSharedRef<SWindow>& Win : AllWindows)
+		{
+			if (Win->IsRegularWindow())
+			{
+				FVector2D Size = Win->GetSizeInScreen();
+				float Area = Size.X * Size.Y;
+				if (Area > LargestArea)
+				{
+					LargestArea = Area;
+					MainWindow = Win;
+				}
+			}
+		}
+	}
+	if (!MainWindow.IsValid())
+	{
+		return ErrorResponse(TEXT("No editor window found - is the editor open?"));
 	}
 
 	TSharedPtr<FGenericWindow> NativeWindow = MainWindow->GetNativeWindow();

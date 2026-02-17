@@ -18,37 +18,95 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
         node_position: list[float] | None = None,
         params: dict | None = None,
     ) -> str:
-        """Add a node to a Blueprint graph.
+        """Add a node to a Blueprint graph. Supports 43 node types.
 
         Args:
-            asset_path: Blueprint asset path
+            asset_path: Blueprint asset path (e.g. '/Game/Blueprints/BP_MyActor')
             graph_name: Name of the graph ('EventGraph', function name, or macro name)
-            node_type: Type of node to create. Options:
-                - 'CallFunction' - Call a UFUNCTION (requires function_name and target_class)
-                - 'Event' - Event node (BeginPlay, Tick, etc.)
-                - 'CustomEvent' - Custom event definition
-                - 'Branch' - If/else branch
-                - 'Sequence' - Execution sequence
-                - 'VariableGet' - Get variable value
-                - 'VariableSet' - Set variable value
-                - 'Cast' - Dynamic cast
-                - 'SpawnActor' - Spawn actor from class
-                - 'ForEachLoop' - For each loop
-                - 'WhileLoop' - While loop
-                - 'MakeArray' - Make array
-                - 'PrintString' - Print string (debug)
-                - 'Delay' - Delay node
-                - 'Timeline' - Timeline node
-                - 'Self' - Self reference
-                - 'MakeStruct' - Make struct
-                - 'BreakStruct' - Break struct
-            function_name: For CallFunction nodes, the function name
-            target_class: For CallFunction nodes, the class that owns the function
+            node_type: Type of node to create. See full list below.
+            function_name: For CallFunction/CommutativeAssociativeBinaryOperator, the function name
+            target_class: For CallFunction/CommutativeAssociativeBinaryOperator, the owning class
             node_position: [x, y] position in the graph editor
-            params: Additional node-specific parameters (e.g., variable_name for Get/Set, event_name for Event)
+            params: Additional node-specific parameters (varies by node_type)
+
+        Node types and their params:
+
+        === FUNCTIONS & EVENTS (4) ===
+        - 'CallFunction' - Call any UFUNCTION. Requires function_name and target_class.
+            Examples: PrintString (KismetSystemLibrary), Delay (KismetSystemLibrary),
+            GetActorLocation (Actor), SpawnSound2D (GameplayStatics)
+        - 'Event' - Built-in event. params: {"event_name": "ReceiveBeginPlay"}
+            Common events: ReceiveBeginPlay, ReceiveTick, ReceiveDestroyed, ReceiveHit
+        - 'CustomEvent' - Custom event. params: {"event_name": "MyEvent"}
+        - 'Self' - Self reference node (no params needed)
+
+        === VARIABLES (2) ===
+        - 'VariableGet' - Get variable. params: {"variable_name": "Health"}
+        - 'VariableSet' - Set variable. params: {"variable_name": "Health"}
+
+        === FLOW CONTROL (7) ===
+        - 'Branch' - If/else (no params needed)
+        - 'Sequence' - Execution sequence (no params needed)
+        - 'MultiGate' - Multiple execution outputs (no params needed)
+        - 'Select' - Select value by index (no params needed)
+        - 'DoOnceMultiInput' - Multi-input do once (no params needed)
+        - 'MacroInstance' - Standard macro. params: {"macro_name": "ForLoop"}
+            Available macros: ForLoop, ForLoopWithBreak, WhileLoop, DoOnce, DoN,
+            Gate, FlipFlop, ForEachLoop, ForEachLoopWithBreak, IsValid
+            Optional: {"macro_path": "/Game/MyMacroLibrary"} for custom macros
+        - 'ForEachElementInEnum' - Loop enum values. params: {"enum_name": "ECollisionChannel"}
+
+        === SWITCH (4) ===
+        - 'SwitchInteger' - Switch on int (no params needed)
+        - 'SwitchString' - Switch on string (no params needed)
+        - 'SwitchName' - Switch on FName (no params needed)
+        - 'SwitchEnum' - Switch on enum. params: {"enum_name": "ECollisionChannel"}
+
+        === CASTING (2) ===
+        - 'DynamicCast' - Cast To. params: {"target_class": "Character"}
+        - 'ClassDynamicCast' - Class cast. params: {"target_class": "Character"}
+
+        === STRUCTS (3) ===
+        - 'MakeStruct' - Make struct. params: {"struct_type": "Vector"}
+            Common structs: Vector, Rotator, Transform, LinearColor, Vector2D, HitResult
+        - 'BreakStruct' - Break struct. params: {"struct_type": "Vector"}
+        - 'SetFieldsInStruct' - Set struct fields. params: {"struct_type": "Vector"}
+
+        === CONTAINERS (4) ===
+        - 'MakeArray' - Make array. Optional params: {"num_inputs": 3}
+        - 'MakeMap' - Make map (no params needed)
+        - 'MakeSet' - Make set (no params needed)
+        - 'GetArrayItem' - Get array element by index (no params needed)
+
+        === SPAWNING & OBJECTS (3) ===
+        - 'SpawnActorFromClass' - Spawn Actor from Class (set class via pin)
+        - 'GenericCreateObject' - Construct Object from Class (set class via pin)
+        - 'AddComponentByClass' - Add Component by Class (set class via pin)
+
+        === DELEGATES (5) ===
+        - 'CreateDelegate' - Create delegate binding (no params needed)
+        - 'AddDelegate' - Bind to event dispatcher. params: {"delegate_name": "OnDamage"}
+        - 'RemoveDelegate' - Unbind from dispatcher. params: {"delegate_name": "OnDamage"}
+        - 'CallDelegate' - Fire event dispatcher. params: {"delegate_name": "OnDamage"}
+        - 'ClearDelegate' - Clear all bindings. params: {"delegate_name": "OnDamage"}
+
+        === TEXT & ENUMS (2) ===
+        - 'FormatText' - Format Text with wildcards (no params needed)
+        - 'EnumLiteral' - Enum value. params: {"enum_name": "ECollisionChannel"}
+
+        === MISC (7) ===
+        - 'Timeline' - Timeline node. params: {"timeline_name": "MyTimeline"}
+        - 'Knot' - Reroute node (no params needed)
+        - 'LoadAsset' - Async load asset (no params needed)
+        - 'EaseFunction' - Ease/interpolation (no params needed)
+        - 'GetClassDefaults' - Get Class Defaults (set class via pin)
+        - 'GetDataTableRow' - Data table lookup (set table via pin)
+        - 'CommutativeAssociativeBinaryOperator' - Expandable math op.
+            Requires function_name and target_class, like CallFunction.
+            Example: function_name='Add_FloatFloat', target_class='KismetMathLibrary'
 
         Returns:
-            JSON with created node ID and pin information
+            JSON with created node ID, class, title, position, and pin information
         """
         result = await send_command("add_node", {
             "asset_path": asset_path,

@@ -6,6 +6,7 @@
 #include "Commands/MCPNodeGraphCommands.h"
 #include "Commands/MCPViewportCommands.h"
 #include "Commands/MCPConsoleCommands.h"
+#include "Commands/MCPMaterialCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -269,7 +270,12 @@ TSharedPtr<FJsonObject> FMCPTCPServer::ProcessCommand(const TSharedPtr<FJsonObje
 
 	TSharedPtr<FJsonObject> Response;
 
-	if (TSharedPtr<FMCPCommandBase>* Handler = CommandHandlers.Find(CommandName))
+	if (CommandName == TEXT("batch_execute"))
+	{
+		// Special handling: execute multiple commands sequentially
+		Response = ProcessBatchCommand(Command);
+	}
+	else if (TSharedPtr<FMCPCommandBase>* Handler = CommandHandlers.Find(CommandName))
 	{
 		const TSharedPtr<FJsonObject>* Params = nullptr;
 		Command->TryGetObjectField(TEXT("params"), Params);
@@ -286,6 +292,86 @@ TSharedPtr<FJsonObject> FMCPTCPServer::ProcessCommand(const TSharedPtr<FJsonObje
 
 	// Always include the request ID in the response
 	Response->SetStringField(TEXT("id"), RequestId);
+	return Response;
+}
+
+TSharedPtr<FJsonObject> FMCPTCPServer::ProcessBatchCommand(const TSharedPtr<FJsonObject>& Command)
+{
+	const TSharedPtr<FJsonObject>* ParamsPtr = nullptr;
+	Command->TryGetObjectField(TEXT("params"), ParamsPtr);
+	if (!ParamsPtr)
+	{
+		TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
+		Err->SetBoolField(TEXT("success"), false);
+		Err->SetStringField(TEXT("error"), TEXT("Missing params"));
+		return Err;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* CommandsArr = nullptr;
+	if (!(*ParamsPtr)->TryGetArrayField(TEXT("commands"), CommandsArr) || !CommandsArr)
+	{
+		TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
+		Err->SetBoolField(TEXT("success"), false);
+		Err->SetStringField(TEXT("error"), TEXT("Missing 'commands' array in params"));
+		return Err;
+	}
+
+	bool bStopOnError = false;
+	(*ParamsPtr)->TryGetBoolField(TEXT("stop_on_error"), bStopOnError);
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	bool bAllSucceeded = true;
+
+	for (int32 i = 0; i < CommandsArr->Num(); ++i)
+	{
+		const TSharedPtr<FJsonObject>* SubCmdPtr = nullptr;
+		if (!(*CommandsArr)[i]->TryGetObject(SubCmdPtr) || !SubCmdPtr)
+		{
+			TSharedPtr<FJsonObject> SubErr = MakeShared<FJsonObject>();
+			SubErr->SetNumberField(TEXT("index"), i);
+			SubErr->SetBoolField(TEXT("success"), false);
+			SubErr->SetStringField(TEXT("error"), TEXT("Invalid command object"));
+			Results.Add(MakeShared<FJsonValueObject>(SubErr));
+			bAllSucceeded = false;
+			if (bStopOnError) break;
+			continue;
+		}
+
+		FString SubCommandName = (*SubCmdPtr)->GetStringField(TEXT("command"));
+		const TSharedPtr<FJsonObject>* SubParams = nullptr;
+		(*SubCmdPtr)->TryGetObjectField(TEXT("params"), SubParams);
+		TSharedPtr<FJsonObject> SubParamsObj = SubParams ? *SubParams : MakeShared<FJsonObject>();
+
+		TSharedPtr<FJsonObject> SubResult;
+		if (TSharedPtr<FMCPCommandBase>* Handler = CommandHandlers.Find(SubCommandName))
+		{
+			SubResult = (*Handler)->Execute(SubParamsObj);
+		}
+		else
+		{
+			SubResult = MakeShared<FJsonObject>();
+			SubResult->SetBoolField(TEXT("success"), false);
+			SubResult->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown command: %s"), *SubCommandName));
+		}
+
+		SubResult->SetNumberField(TEXT("index"), i);
+		SubResult->SetStringField(TEXT("command"), SubCommandName);
+		Results.Add(MakeShared<FJsonValueObject>(SubResult));
+
+		if (!SubResult->GetBoolField(TEXT("success")))
+		{
+			bAllSucceeded = false;
+			if (bStopOnError) break;
+		}
+	}
+
+	TSharedPtr<FJsonObject> Response = MakeShared<FJsonObject>();
+	Response->SetBoolField(TEXT("success"), bAllSucceeded);
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetArrayField(TEXT("results"), Results);
+	Data->SetNumberField(TEXT("total"), CommandsArr->Num());
+	Data->SetNumberField(TEXT("executed"), Results.Num());
+	Response->SetObjectField(TEXT("data"), Data);
 	return Response;
 }
 
@@ -342,6 +428,12 @@ void FMCPTCPServer::RegisterCommands()
 	// Console commands
 	Register(MakeShared<FMCPGetConsoleLogsCommand>(LogCapture));
 	Register(MakeShared<FMCPExecuteConsoleCommandCommand>());
+
+	// Material commands
+	Register(MakeShared<FMCPCreateMaterialCommand>());
+	Register(MakeShared<FMCPAssignMaterialCommand>());
+	Register(MakeShared<FMCPModifyMaterialCommand>());
+	Register(MakeShared<FMCPGetMaterialInfoCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }

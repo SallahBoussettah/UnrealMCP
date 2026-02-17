@@ -11,6 +11,7 @@ from .tools.property import register_property_tools
 from .tools.actor import register_actor_tools
 from .tools.viewport import register_viewport_tools
 from .tools.console import register_console_tools
+from .tools.material import register_material_tools
 
 # Configure logging
 logging.basicConfig(
@@ -37,6 +38,7 @@ register_property_tools(mcp)
 register_actor_tools(mcp)
 register_viewport_tools(mcp)
 register_console_tools(mcp)
+register_material_tools(mcp)
 
 logger.info("UnrealMCP server initialized with all tools registered")
 

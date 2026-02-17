@@ -32,6 +32,9 @@ private:
 	/** Process a JSON command and return the response. */
 	TSharedPtr<FJsonObject> ProcessCommand(const TSharedPtr<FJsonObject>& Command);
 
+	/** Process a batch of commands sequentially. */
+	TSharedPtr<FJsonObject> ProcessBatchCommand(const TSharedPtr<FJsonObject>& Command);
+
 	/** Send a JSON response to the client. */
 	bool SendResponse(FSocket* ClientSocket, const TSharedPtr<FJsonObject>& Response);
 

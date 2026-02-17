@@ -54,3 +54,30 @@ def register_console_tools(mcp: FastMCP) -> None:
         if not result.get("success"):
             return f"Error: {result.get('error', 'Unknown error')}"
         return str(result.get("data", {}))
+
+    @mcp.tool()
+    async def batch_execute(
+        commands: list[dict],
+        stop_on_error: bool = False,
+    ) -> str:
+        """Execute multiple commands in a single batch operation. Each command runs
+        sequentially on the game thread in one TCP round-trip.
+
+        Args:
+            commands: List of command objects, each with 'command' (str) and 'params' (dict).
+                Example: [
+                    {"command": "spawn_actor", "params": {"actor_class": "PointLight", "location": [0, 0, 300]}},
+                    {"command": "spawn_actor", "params": {"actor_class": "PointLight", "location": [200, 0, 300]}}
+                ]
+            stop_on_error: If True, stop executing remaining commands when one fails (default: False)
+
+        Returns:
+            JSON with results array (one entry per command), total count, and executed count
+        """
+        result = await send_command("batch_execute", {
+            "commands": commands,
+            "stop_on_error": stop_on_error,
+        })
+        if not result.get("success"):
+            return f"Error: {result.get('error', 'Unknown error')}"
+        return str(result.get("data", {}))
