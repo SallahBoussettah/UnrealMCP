@@ -39,6 +39,63 @@ static bool SaveWorldPackage(UWorld* World, const FString& PackagePath)
 	return UPackage::SavePackage(Package, World, *PackageFilename, SaveArgs);
 }
 
+// Helper: clean up orphan worlds before LoadMap to prevent "World Memory Leaks"
+// fatal error. Finds ALL worlds not actively used by the editor or its streaming
+// levels, destroys them and their packages, then runs GC.
+static void CleanUpOrphanWorlds()
+{
+	UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!EditorWorld) return;
+
+	// Build set of worlds actively in use
+	TSet<UWorld*> ActiveWorlds;
+	ActiveWorlds.Add(EditorWorld);
+	for (ULevelStreaming* SL : EditorWorld->GetStreamingLevels())
+	{
+		if (SL)
+		{
+			ULevel* LoadedLevel = SL->GetLoadedLevel();
+			if (LoadedLevel)
+			{
+				UWorld* LW = Cast<UWorld>(LoadedLevel->GetOuter());
+				if (LW) ActiveWorlds.Add(LW);
+			}
+		}
+	}
+
+	// Find orphan worlds (skip Game/PIE/Preview worlds that belong to the engine)
+	TArray<UWorld*> OrphanWorlds;
+	for (TObjectIterator<UWorld> It; It; ++It)
+	{
+		UWorld* W = *It;
+		if (!W || ActiveWorlds.Contains(W)) continue;
+		if (W->WorldType == EWorldType::Game || W->WorldType == EWorldType::PIE ||
+			W->WorldType == EWorldType::EditorPreview || W->WorldType == EWorldType::GamePreview)
+			continue;
+
+		OrphanWorlds.Add(W);
+	}
+
+	// Destroy orphan worlds and mark their packages for GC
+	for (UWorld* W : OrphanWorlds)
+	{
+		UPackage* Pkg = W->GetOutermost();
+		W->DestroyWorld(false);
+		W->ClearFlags(RF_Standalone | RF_Public);
+		W->MarkAsGarbage();
+		if (Pkg)
+		{
+			Pkg->ClearFlags(RF_Standalone | RF_Public);
+			Pkg->MarkAsGarbage();
+		}
+	}
+
+	if (OrphanWorlds.Num() > 0)
+	{
+		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+	}
+}
+
 // Helper to find a streaming level by package name (full path or short name)
 static ULevelStreaming* FindStreamingLevelByName(UWorld* World, const FString& PackageName)
 {
@@ -192,6 +249,9 @@ TSharedPtr<FJsonObject> FMCPCreateLevelCommand::Execute(const TSharedPtr<FJsonOb
 			FString MapDir = FPaths::GetPath(SavePath);
 			AssetRegistry.ScanPathsSynchronous({MapDir}, true);
 
+			// Clean up any orphan worlds before LoadMap to prevent memory leak crash
+			CleanUpOrphanWorlds();
+
 			// Reload from the saved path so the editor gets the correct package name
 			NewWorld = UEditorLoadingAndSavingUtils::LoadMap(SavePath);
 			if (!NewWorld)
@@ -265,6 +325,9 @@ TSharedPtr<FJsonObject> FMCPSaveLevelCommand::Execute(const TSharedPtr<FJsonObje
 		FString MapDir = FPaths::GetPath(AssetPath);
 		AssetRegistry.ScanPathsSynchronous({MapDir}, true);
 
+		// Clean up any orphan worlds before LoadMap to prevent memory leak crash
+		CleanUpOrphanWorlds();
+
 		// Reload so the editor picks up the correct package name
 		UWorld* ReloadedWorld = UEditorLoadingAndSavingUtils::LoadMap(AssetPath);
 		if (!ReloadedWorld)
@@ -323,6 +386,9 @@ TSharedPtr<FJsonObject> FMCPLoadLevelCommand::Execute(const TSharedPtr<FJsonObje
 			/*bSaveContentPackages=*/ false
 		);
 	}
+
+	// Clean up any orphan worlds before LoadMap to prevent memory leak crash
+	CleanUpOrphanWorlds();
 
 	UWorld* LoadedWorld = UEditorLoadingAndSavingUtils::LoadMap(MapPath);
 	if (!LoadedWorld)
@@ -414,20 +480,8 @@ TSharedPtr<FJsonObject> FMCPAddStreamingLevelCommand::Execute(const TSharedPtr<F
 			return ErrorResponse(FString::Printf(TEXT("Failed to save new level: %s"), *PackageName));
 		}
 
-		// Clean up the temporary world and package to prevent "World Memory Leaks"
-		// crash when LoadMap is called later. AddLevelToWorld will load fresh from disk.
-		SubWorld->DestroyWorld(false);
-		SubWorld->ClearFlags(RF_Standalone | RF_Public);
-		SubWorld->MarkAsGarbage();
-		SubWorld = nullptr;
-
-		LevelPackage->ClearFlags(RF_Standalone | RF_Public);
-		LevelPackage->MarkAsGarbage();
-		LevelPackage = nullptr;
-
-		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
-
-		// Add the saved level as a streaming sub-level (loads from disk)
+		// Let AddLevelToWorld use the in-memory package directly.
+		// Orphan cleanup happens later in load_level/create_level before LoadMap.
 		NewStreaming = UEditorLevelUtils::AddLevelToWorld(
 			World,
 			*PackageName,
