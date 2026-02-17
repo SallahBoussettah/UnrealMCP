@@ -3,14 +3,15 @@
 ## Done
 
 ### Core Infrastructure
-- [x] Python MCP server (stdio transport, 36 tools)
-- [x] C++ UE5 editor plugin (TCP port 55555, 34 command handlers + batch_execute)
+- [x] Python MCP server (stdio transport, 43 tools)
+- [x] C++ UE5 editor plugin (TCP port 55555, 41 command handlers + batch_execute)
 - [x] 4-byte length-prefixed JSON protocol
 - [x] UE 5.6 compatibility (EpicUnrealMCPModule integration, SavePackage API, module structure)
 - [x] TCP reliability (null-terminate buffers, loop partial sends for large payloads)
 - [x] Full editor viewport screenshots (Win32 PrintWindow + fallback window detection)
 - [x] Batch operations (`batch_execute` - multiple commands in one TCP round-trip)
 - [x] Material tools (create, assign, modify, get_material_info)
+- [x] Level management tools (get_level_info, create_level, save_level, load_level, add/remove streaming levels, visibility)
 - [x] Epic BlueprintGraph utility library (node types, connectors, variables, functions)
 
 ### Bugs Fixed
@@ -18,7 +19,7 @@
 - [x] **Screenshot window detection** - `take_screenshot` failed when editor wasn't the focused window. Fixed with fallback to largest visible regular window.
 - [x] **BlueprintGraph directory nesting** - Double `BlueprintGraph/BlueprintGraph/` path caused include failures. Flattened to single level.
 
-### All 36 Tools Tested & Verified (36/36)
+### All 43 Tools Tested & Verified (43/43)
 
 #### Actor (6/6)
 - [x] `get_actors_in_level` - list actors with class/name/tag filtering
@@ -70,6 +71,15 @@
 - [x] `execute_console_command` - run any console command
 - [x] `batch_execute` - multiple commands in single TCP round-trip
 
+#### Level (7/7)
+- [x] `get_level_info` - world name, persistent level, streaming sub-levels with state
+- [x] `create_level` - blank map or from template, optional save path
+- [x] `save_level` - save current, Save As, or save all dirty packages
+- [x] `load_level` - open existing map with optional save of current
+- [x] `add_streaming_level` - add existing or create new sub-level (Dynamic/AlwaysLoaded)
+- [x] `remove_streaming_level` - remove sub-level from world
+- [x] `set_level_visibility` - show/hide sub-level, optionally make current
+
 ## Planned Upgrades
 
 ### Upgrade 1: All Blueprint Node Types (DONE)
@@ -88,8 +98,8 @@ Expanded `add_node` from 8 to 43 node types covering all major K2Node categories
 ### Upgrade 2: Compilation Error Details
 Enhance `compile_blueprint` to return specific error locations — which node, which pin, what the error is. This enables an AI auto-fix loop: create → compile → read errors → fix → recompile. Currently only returns `has_errors: true/false`.
 
-### Upgrade 3: Level Management
-Add tools for creating, saving, and loading levels/maps. Manage sub-levels and world partition. Lets AI set up complete game worlds with multiple areas.
+### Upgrade 3: Level Management (DONE)
+Added 7 level management tools: get_level_info, create_level, save_level, load_level, add_streaming_level, remove_streaming_level, set_level_visibility. Supports blank/template map creation, Save/Save As/Save All, loading maps, and full streaming sub-level management (add, remove, visibility, make current).
 
 ### Upgrade 4: Asset Import + Content Browser
 Import meshes, textures, and sounds from disk paths into the project. Search and browse existing project assets in the Content Browser. Lets AI work with real art assets, not just primitives.

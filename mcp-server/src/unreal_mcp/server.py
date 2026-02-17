@@ -12,6 +12,7 @@ from .tools.actor import register_actor_tools
 from .tools.viewport import register_viewport_tools
 from .tools.console import register_console_tools
 from .tools.material import register_material_tools
+from .tools.level import register_level_tools
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +28,8 @@ mcp = FastMCP(
     instructions=(
         "AI-powered control of Unreal Engine 5.6+ through the Model Context Protocol. "
         "Provides tools for Blueprint editing, node graph manipulation, property inspection, "
-        "actor management, viewport screenshots, and console log reading."
+        "actor management, viewport screenshots, console log reading, material editing, "
+        "and level/map management."
     ),
 )
 
@@ -39,6 +41,7 @@ register_actor_tools(mcp)
 register_viewport_tools(mcp)
 register_console_tools(mcp)
 register_material_tools(mcp)
+register_level_tools(mcp)
 
 logger.info("UnrealMCP server initialized with all tools registered")
 

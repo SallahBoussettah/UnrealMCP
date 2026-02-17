@@ -7,6 +7,7 @@
 #include "Commands/MCPViewportCommands.h"
 #include "Commands/MCPConsoleCommands.h"
 #include "Commands/MCPMaterialCommands.h"
+#include "Commands/MCPLevelCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -434,6 +435,15 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPAssignMaterialCommand>());
 	Register(MakeShared<FMCPModifyMaterialCommand>());
 	Register(MakeShared<FMCPGetMaterialInfoCommand>());
+
+	// Level commands
+	Register(MakeShared<FMCPGetLevelInfoCommand>());
+	Register(MakeShared<FMCPCreateLevelCommand>());
+	Register(MakeShared<FMCPSaveLevelCommand>());
+	Register(MakeShared<FMCPLoadLevelCommand>());
+	Register(MakeShared<FMCPAddStreamingLevelCommand>());
+	Register(MakeShared<FMCPRemoveStreamingLevelCommand>());
+	Register(MakeShared<FMCPSetLevelVisibilityCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }
