@@ -38,6 +38,8 @@ public class UnrealMCP : ModuleRules
 			"HTTP",
 			"EditorFramework",
 			"LevelEditor",
+			"EnhancedInput",
+			"InputBlueprintNodes",
 		});
 	}
 }

@@ -53,8 +53,9 @@ void FMCPTCPServer::Stop()
 	if (Thread)
 	{
 		Thread->WaitForCompletion();
-		delete Thread;
+		FRunnableThread* ThreadToDelete = Thread;
 		Thread = nullptr;
+		delete ThreadToDelete;
 	}
 
 	CommandHandlers.Empty();

@@ -73,6 +73,10 @@
 #include "K2Node_GetDataTableRow.h"
 #include "K2Node_CommutativeAssociativeBinaryOperator.h"
 
+// Enhanced Input
+#include "K2Node_EnhancedInputAction.h"
+#include "InputAction.h"
+
 // For Timeline template
 #include "Engine/TimelineTemplate.h"
 
@@ -928,9 +932,37 @@ TSharedPtr<FJsonObject> FMCPAddNodeCommand::Execute(const TSharedPtr<FJsonObject
 		MathNode->AllocateDefaultPins();
 		NewNode = MathNode;
 	}
+
+	// ========================================================================
+	// ENHANCED INPUT
+	// ========================================================================
+
+	else if (NodeType == TEXT("EnhancedInputAction"))
+	{
+		FString InputActionPath = GetParamString(Params, TEXT("input_action_path"));
+		if (InputActionPath.IsEmpty()) return ErrorResponse(TEXT("input_action_path is required for EnhancedInputAction (e.g. '/Game/Input/Actions/IA_Interact')"));
+
+		UInputAction* Action = LoadObject<UInputAction>(nullptr, *InputActionPath);
+		if (!Action)
+		{
+			// Try appending asset name if not provided (e.g. '/Game/Input/Actions/IA_Interact' -> '/Game/Input/Actions/IA_Interact.IA_Interact')
+			FString AssetName = FPaths::GetCleanFilename(InputActionPath);
+			FString FullPath = InputActionPath + TEXT(".") + AssetName;
+			Action = LoadObject<UInputAction>(nullptr, *FullPath);
+		}
+		if (!Action) return ErrorResponse(FString::Printf(TEXT("InputAction not found: %s"), *InputActionPath));
+
+		UK2Node_EnhancedInputAction* InputNode = NewObject<UK2Node_EnhancedInputAction>(Graph);
+		InputNode->InputAction = Action;
+		InputNode->NodePosX = Position.X;
+		InputNode->NodePosY = Position.Y;
+		Graph->AddNode(InputNode, false, false);
+		InputNode->AllocateDefaultPins();
+		NewNode = InputNode;
+	}
 	else
 	{
-		return ErrorResponse(FString::Printf(TEXT("Unsupported node type: %s. Supported types: CallFunction, Event, CustomEvent, Branch, Sequence, VariableGet, VariableSet, Self, MacroInstance, MultiGate, Select, DoOnceMultiInput, ForEachElementInEnum, SwitchInteger, SwitchString, SwitchEnum, SwitchName, DynamicCast, ClassDynamicCast, MakeStruct, BreakStruct, SetFieldsInStruct, MakeArray, MakeMap, MakeSet, GetArrayItem, SpawnActorFromClass, GenericCreateObject, AddComponentByClass, CreateDelegate, AddDelegate, RemoveDelegate, CallDelegate, ClearDelegate, FormatText, EnumLiteral, Timeline, Knot, LoadAsset, EaseFunction, GetClassDefaults, GetDataTableRow, CommutativeAssociativeBinaryOperator"), *NodeType));
+		return ErrorResponse(FString::Printf(TEXT("Unsupported node type: %s. Supported types: CallFunction, Event, CustomEvent, Branch, Sequence, VariableGet, VariableSet, Self, MacroInstance, MultiGate, Select, DoOnceMultiInput, ForEachElementInEnum, SwitchInteger, SwitchString, SwitchEnum, SwitchName, DynamicCast, ClassDynamicCast, MakeStruct, BreakStruct, SetFieldsInStruct, MakeArray, MakeMap, MakeSet, GetArrayItem, SpawnActorFromClass, GenericCreateObject, AddComponentByClass, CreateDelegate, AddDelegate, RemoveDelegate, CallDelegate, ClearDelegate, FormatText, EnumLiteral, Timeline, Knot, LoadAsset, EaseFunction, GetClassDefaults, GetDataTableRow, CommutativeAssociativeBinaryOperator, EnhancedInputAction"), *NodeType));
 	}
 
 	if (!NewNode) return ErrorResponse(TEXT("Failed to create node"));

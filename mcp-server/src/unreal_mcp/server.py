@@ -15,6 +15,7 @@ from .tools.material import register_material_tools
 from .tools.level import register_level_tools
 from .tools.asset import register_asset_tools
 from .tools.pie import register_pie_tools
+from .tools.batch import register_batch_tools
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +48,7 @@ register_material_tools(mcp)
 register_level_tools(mcp)
 register_asset_tools(mcp)
 register_pie_tools(mcp)
+register_batch_tools(mcp)
 
 logger.info("UnrealMCP server initialized with all tools registered")
 
