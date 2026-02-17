@@ -3,8 +3,8 @@
 ## Done
 
 ### Core Infrastructure
-- [x] Python MCP server (stdio transport, 48 tools)
-- [x] C++ UE5 editor plugin (TCP port 55555, 46 command handlers + batch_execute)
+- [x] Python MCP server (stdio transport, 52 tools)
+- [x] C++ UE5 editor plugin (TCP port 55555, 50 command handlers + batch_execute)
 - [x] 4-byte length-prefixed JSON protocol
 - [x] UE 5.6 compatibility (EpicUnrealMCPModule integration, SavePackage API, module structure)
 - [x] TCP reliability (null-terminate buffers, loop partial sends for large payloads)
@@ -13,6 +13,7 @@
 - [x] Material tools (create, assign, modify, get_material_info)
 - [x] Level management tools (get_level_info, create_level, save_level, load_level, add/remove streaming levels, visibility)
 - [x] Asset import + Content Browser tools (import_asset, search_assets, get_asset_info, delete_asset, rename_asset)
+- [x] Play-in-Editor (PIE) control tools (start_pie, stop_pie, get_pie_status, set_pie_paused)
 - [x] Epic BlueprintGraph utility library (node types, connectors, variables, functions)
 
 ### Bugs Fixed
@@ -20,7 +21,7 @@
 - [x] **Screenshot window detection** - `take_screenshot` failed when editor wasn't the focused window. Fixed with fallback to largest visible regular window.
 - [x] **BlueprintGraph directory nesting** - Double `BlueprintGraph/BlueprintGraph/` path caused include failures. Flattened to single level.
 
-### All 48 Tools Tested & Verified (48/48)
+### All 52 Tools Tested & Verified (52/52)
 
 #### Actor (6/6)
 - [x] `get_actors_in_level` - list actors with class/name/tag filtering
@@ -69,7 +70,7 @@
 
 #### Console (3/3)
 - [x] `get_console_logs` - filtered by verbosity/category, timestamped
-- [x] `execute_console_command` - run any console command
+- [x] `execute_console_command` - run any console command (supports `target="pie"` for PIE world)
 - [x] `batch_execute` - multiple commands in single TCP round-trip
 
 #### Level (7/7)
@@ -87,6 +88,12 @@
 - [x] `get_asset_info` - metadata, disk size, referencers, dependencies
 - [x] `delete_asset` - delete with reference checking (force option)
 - [x] `rename_asset` - rename/move with auto-redirectors
+
+#### PIE (4/4)
+- [x] `start_pie` - start Play-in-Editor (viewport, new_window, simulate modes)
+- [x] `stop_pie` - stop current PIE session
+- [x] `get_pie_status` - check running/paused/simulating state, world name, player count
+- [x] `set_pie_paused` - pause or resume PIE gameplay
 
 ## Planned Upgrades
 
@@ -112,8 +119,8 @@ Added 7 level management tools: get_level_info, create_level, save_level, load_l
 ### Upgrade 4: Asset Import + Content Browser (DONE)
 Added 5 asset management tools: import_asset (automated pipeline for FBX/OBJ/PNG/JPG/WAV/etc.), search_assets (Content Browser search by type/path/name), get_asset_info (metadata, references, disk size), delete_asset (with reference checking), rename_asset (rename/move with redirectors).
 
-### Upgrade 5: Play-in-Editor (PIE) Control
-Start/stop Play-in-Editor sessions so AI can test what it built and read runtime logs to debug gameplay issues. Close the feedback loop between building and testing.
+### Upgrade 5: Play-in-Editor (PIE) Control (DONE)
+Added 4 PIE control tools: start_pie (viewport/new_window/simulate modes), stop_pie, get_pie_status (running/paused/simulating state), set_pie_paused. Enhanced execute_console_command with optional `target` param to route commands to the PIE world. Closes the build→test→debug feedback loop.
 
 ## Future Roadmap
 

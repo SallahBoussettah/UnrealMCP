@@ -39,18 +39,25 @@ def register_console_tools(mcp: FastMCP) -> None:
         return str(result.get("data", {}))
 
     @mcp.tool()
-    async def execute_console_command(command: str) -> str:
-        """Execute a console command in the Unreal Editor.
+    async def execute_console_command(command: str, target: str = "") -> str:
+        """Execute a console command in the Unreal Editor or in a running PIE session.
 
         Args:
             command: Console command to execute (e.g., 'stat fps', 'obj list')
+            target: Where to execute the command. Options:
+                - '' (empty) - execute in the editor world (default)
+                - 'editor' - execute in the editor world
+                - 'pie' - execute in the PIE (Play-in-Editor) world.
+                    Requires an active PIE session (start one with start_pie).
 
         Returns:
-            Command execution result and any output
+            Command execution result including target and status
         """
-        result = await send_command("execute_console_command", {
-            "command": command,
-        })
+        params: dict = {"command": command}
+        if target:
+            params["target"] = target
+
+        result = await send_command("execute_console_command", params)
         if not result.get("success"):
             return f"Error: {result.get('error', 'Unknown error')}"
         return str(result.get("data", {}))

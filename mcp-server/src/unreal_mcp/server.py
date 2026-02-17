@@ -14,6 +14,7 @@ from .tools.console import register_console_tools
 from .tools.material import register_material_tools
 from .tools.level import register_level_tools
 from .tools.asset import register_asset_tools
+from .tools.pie import register_pie_tools
 
 # Configure logging
 logging.basicConfig(
@@ -30,7 +31,8 @@ mcp = FastMCP(
         "AI-powered control of Unreal Engine 5.6+ through the Model Context Protocol. "
         "Provides tools for Blueprint editing, node graph manipulation, property inspection, "
         "actor management, viewport screenshots, console log reading, material editing, "
-        "level/map management, and asset import/Content Browser operations."
+        "level/map management, asset import/Content Browser operations, "
+        "and Play-in-Editor (PIE) session control."
     ),
 )
 
@@ -44,6 +46,7 @@ register_console_tools(mcp)
 register_material_tools(mcp)
 register_level_tools(mcp)
 register_asset_tools(mcp)
+register_pie_tools(mcp)
 
 logger.info("UnrealMCP server initialized with all tools registered")
 

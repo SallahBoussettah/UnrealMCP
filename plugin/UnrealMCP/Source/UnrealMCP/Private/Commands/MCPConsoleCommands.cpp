@@ -133,16 +133,36 @@ TSharedPtr<FJsonObject> FMCPExecuteConsoleCommandCommand::Execute(const TSharedP
 		return ErrorResponse(TEXT("Command is required"));
 	}
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	FString Target = Params->GetStringField(TEXT("target"));
+
+	UWorld* World = nullptr;
+	FString UsedTarget;
+
+	if (Target == TEXT("pie"))
+	{
+		if (!GEditor || !GEditor->PlayWorld)
+		{
+			return ErrorResponse(TEXT("No Play-in-Editor session is running. Start one with start_pie first."));
+		}
+		World = GEditor->PlayWorld;
+		UsedTarget = TEXT("pie");
+	}
+	else
+	{
+		World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		UsedTarget = TEXT("editor");
+	}
+
 	if (!World)
 	{
-		return ErrorResponse(TEXT("No editor world available"));
+		return ErrorResponse(TEXT("No world available"));
 	}
 
 	GEditor->Exec(World, *Command);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("command"), Command);
+	Data->SetStringField(TEXT("target"), UsedTarget);
 	Data->SetStringField(TEXT("status"), TEXT("executed"));
 	return SuccessResponse(Data);
 }

@@ -1,14 +1,14 @@
 # UnrealMCP
 
-AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants like Claude create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, and manage levels/maps — all through natural language.
+AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants like Claude create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, manage levels/maps, and run Play-in-Editor sessions — all through natural language.
 
-**48 tools** across 9 categories. Fully tested against a live UE5.6 editor.
+**52 tools** across 10 categories. Fully tested against a live UE5.6 editor.
 
 ## Architecture
 
 ```
 Claude Code ──stdio──> Python MCP Server ──TCP:55555──> C++ UE5 Editor Plugin
-                       (48 tools)                       (46 command handlers)
+                       (52 tools)                       (50 command handlers)
                        mcp-server/                      plugin/UnrealMCP/
 ```
 
@@ -51,7 +51,7 @@ Add to your `.claude.json` (or use `claude mcp add`):
 }
 ```
 
-## Tools (48 total)
+## Tools (52 total)
 
 ### Blueprint Tools (8)
 
@@ -212,8 +212,17 @@ Reroute         → node_type="Knot"
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `get_console_logs` | Read recent log messages | `count`, `verbosity_filter` (Error, Warning, Display, Log), `category_filter` (LogBlueprint, LogTemp, LogCompile, etc.) |
-| `execute_console_command` | Run a console command | `command` (e.g., `stat fps`, `obj list`, `showflag.collision 1`) |
+| `execute_console_command` | Run a console command in the editor or PIE world | `command` (e.g., `stat fps`, `obj list`), `target` (`"editor"` or `"pie"` — default: editor) |
 | `batch_execute` | Execute multiple commands in one TCP round-trip | `commands` [{command, params}, ...], `stop_on_error` |
+
+### PIE Tools (4)
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `start_pie` | Start a Play-in-Editor session | `mode` (`"viewport"`, `"new_window"`, `"simulate"`, or empty for last editor settings) |
+| `stop_pie` | Stop the current PIE session | (none) |
+| `get_pie_status` | Get PIE state | (none) → returns `is_running`, `is_paused`, `is_simulating`, `world_name`, `player_count` |
+| `set_pie_paused` | Pause or resume the PIE session | `paused` (bool) |
 
 ## What Can You Build With This?
 
@@ -221,6 +230,7 @@ Reroute         → node_type="Knot"
 - **Automated Blueprint construction** — Programmatically build complex node graphs (health systems, inventory, AI behavior)
 - **Level design assistance** — Create/load/save maps, manage streaming sub-levels, spawn actors, set transforms, assign materials
 - **Asset management** — Import meshes/textures/sounds from disk, search the Content Browser, inspect asset metadata, rename and organize assets
+- **Runtime testing** — Start Play-in-Editor sessions, pause/resume gameplay, read runtime logs to verify behavior, debug at runtime
 - **Debugging** — Read console logs, inspect properties, take screenshots to understand editor state
 - **Batch operations** — Spawn dozens of actors or modify properties across many objects in a single command
 
@@ -233,6 +243,7 @@ Reroute         → node_type="Knot"
 - **Materials**: `UMaterialFactoryNew::FactoryCreateNew()`, `UMaterial::GetEditorOnlyData()`, `UMaterialEditingLibrary`
 - **Levels**: `UEditorLoadingAndSavingUtils` (NewBlankMap, LoadMap), `UEditorLevelUtils` (streaming levels, visibility), `FEditorFileUtils` (save)
 - **Assets**: `UAutomatedAssetImportData` + `ImportAssetsAutomated()`, `IAssetRegistry::GetAssets()`, `UEditorAssetLibrary` (Delete, Rename)
+- **PIE**: `GEditor->RequestPlaySession()`, `StartQueuedPlaySessionRequest()`, `RequestEndPlayMap()`, `SetPIEWorldsPaused()`
 - **Screenshots**: Win32 `PrintWindow()` with `PW_RENDERFULLCONTENT`, `IImageWrapper` PNG encoding
 - **Thread Safety**: All commands execute on game thread via `AsyncTask(ENamedThreads::GameThread)`, undo support via `FScopedTransaction`
 
@@ -254,7 +265,7 @@ This plugin integrates with UE 5.6's built-in MCP subsystem (`EpicUnrealMCPModul
 UnrealMCP/
   mcp-server/                  # Python MCP server
     src/unreal_mcp/
-      server.py                # Entry point, FastMCP setup (48 tools)
+      server.py                # Entry point, FastMCP setup (52 tools)
       connection.py            # TCP client (4-byte prefix protocol)
       tools/                   # Tool definitions by category
         blueprint.py           #   8 Blueprint tools
@@ -266,11 +277,12 @@ UnrealMCP/
         console.py             #   3 Console tools (incl. batch_execute)
         level.py               #   7 Level tools
         asset.py               #   5 Asset tools
+        pie.py                 #   4 PIE tools
   plugin/UnrealMCP/            # C++ UE5 editor plugin
     Source/UnrealMCP/
       Private/
         MCPTCPServer.cpp       # TCP listener, command dispatch, batch_execute
-        Commands/              # 46 command handlers by category
+        Commands/              # 50 command handlers by category
           MCPBlueprintCommands.cpp
           MCPNodeGraphCommands.cpp
           MCPActorCommands.cpp
@@ -280,6 +292,7 @@ UnrealMCP/
           MCPConsoleCommands.cpp
           MCPLevelCommands.cpp
           MCPAssetCommands.cpp
+          MCPPIECommands.cpp
       Public/
         Commands/              # Header files
   screenshots/                 # Saved viewport captures

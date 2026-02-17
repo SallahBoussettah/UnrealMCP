@@ -37,6 +37,7 @@ public class UnrealMCP : ModuleRules
 			"EditorSubsystem",
 			"HTTP",
 			"EditorFramework",
+			"LevelEditor",
 		});
 	}
 }
