@@ -108,15 +108,18 @@ UK2Node_Event* FEventManager::CreateEventNode(UEdGraph* Graph, const FString& Ev
 	if (EventFunction)
 	{
 		EventNode = NewObject<UK2Node_Event>(Graph);
-		EventNode->EventReference.SetExternalMember(FName(*EventName), BlueprintClass);
+		// Use the function's owning class (e.g., AActor for ReceiveTick) not BlueprintClass
+		// This ensures the compiler recognizes it as a native event override
+		EventNode->EventReference.SetExternalMember(FName(*EventName), EventFunction->GetOwnerClass());
+		EventNode->bOverrideFunction = true;
 		EventNode->NodePosX = static_cast<int32>(Position.X);
 		EventNode->NodePosY = static_cast<int32>(Position.Y);
 		Graph->AddNode(EventNode, true);
 		EventNode->PostPlacedNewNode();
 		EventNode->AllocateDefaultPins();
 
-		UE_LOG(LogTemp, Display, TEXT("F18: Created new event node '%s' (ID: %s)"),
-			*EventName, *EventNode->NodeGuid.ToString());
+		UE_LOG(LogTemp, Display, TEXT("F18: Created new event node '%s' (ID: %s) with owner class '%s'"),
+			*EventName, *EventNode->NodeGuid.ToString(), *EventFunction->GetOwnerClass()->GetName());
 	}
 	else
 	{

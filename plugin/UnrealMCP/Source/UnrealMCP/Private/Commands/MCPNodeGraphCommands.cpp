@@ -271,11 +271,27 @@ TSharedPtr<FJsonObject> FMCPAddNodeCommand::Execute(const TSharedPtr<FJsonObject
 	{
 		FString EventName = GetParamString(Params, TEXT("event_name"), TEXT("ReceiveBeginPlay"));
 
+		// Also accept short names like "Tick" → "ReceiveTick", "BeginPlay" → "ReceiveBeginPlay"
+		if (!EventName.StartsWith(TEXT("Receive")))
+		{
+			EventName = TEXT("Receive") + EventName;
+		}
+
+		// Find the declaring class for this event function
+		UClass* EventOwnerClass = AActor::StaticClass();
+		UFunction* EventFunc = BP->GeneratedClass ? BP->GeneratedClass->FindFunctionByName(FName(*EventName)) : nullptr;
+		if (EventFunc)
+		{
+			EventOwnerClass = EventFunc->GetOwnerClass();
+		}
+
 		UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
-		EventNode->EventReference.SetExternalMember(FName(*EventName), AActor::StaticClass());
+		EventNode->EventReference.SetExternalMember(FName(*EventName), EventOwnerClass);
+		EventNode->bOverrideFunction = true;
 		EventNode->NodePosX = Position.X;
 		EventNode->NodePosY = Position.Y;
 		Graph->AddNode(EventNode, false, false);
+		EventNode->PostPlacedNewNode();
 		EventNode->AllocateDefaultPins();
 		NewNode = EventNode;
 	}

@@ -3,8 +3,8 @@
 ## Done
 
 ### Core Infrastructure
-- [x] Python MCP server (stdio transport, 52 tools)
-- [x] C++ UE5 editor plugin (TCP port 55555, 50 command handlers + batch_execute)
+- [x] Python MCP server (stdio transport, 53 tools)
+- [x] C++ UE5 editor plugin (TCP port 55555, 51 command handlers + batch_execute)
 - [x] 4-byte length-prefixed JSON protocol
 - [x] UE 5.6 compatibility (EpicUnrealMCPModule integration, SavePackage API, module structure)
 - [x] TCP reliability (null-terminate buffers, loop partial sends for large payloads)
@@ -21,7 +21,7 @@
 - [x] **Screenshot window detection** - `take_screenshot` failed when editor wasn't the focused window. Fixed with fallback to largest visible regular window.
 - [x] **BlueprintGraph directory nesting** - Double `BlueprintGraph/BlueprintGraph/` path caused include failures. Flattened to single level.
 
-### All 52 Tools Tested & Verified (52/52)
+### All 53 Tools Tested & Verified (53/53)
 
 #### Actor (6/6)
 - [x] `get_actors_in_level` - list actors with class/name/tag filtering
@@ -31,7 +31,7 @@
 - [x] `set_actor_transform` - position, rotation, scale (partial updates supported)
 - [x] `duplicate_actor` - clone with offset
 
-#### Blueprint (8/8)
+#### Blueprint (9/9)
 - [x] `create_blueprint` - create BP class (Actor, Pawn, Character, etc.)
 - [x] `list_blueprints` - list assets in directory, recursive
 - [x] `get_blueprint_info` - variables, functions, components, graphs
@@ -40,6 +40,7 @@
 - [x] `add_blueprint_variable` - add typed variable with category and defaults
 - [x] `remove_blueprint_variable` - remove variable
 - [x] `add_blueprint_component` - add component to hierarchy with transform
+- [x] `set_blueprint_component_defaults` - set default property on BP component template (CDO)
 
 #### Node Graph (8/8)
 - [x] `add_node` - 43 node types across 10 categories (functions, events, variables, flow control, switch, casting, structs, containers, spawning, delegates, text, misc)
@@ -121,6 +122,9 @@ Added 5 asset management tools: import_asset (automated pipeline for FBX/OBJ/PNG
 
 ### Upgrade 5: Play-in-Editor (PIE) Control (DONE)
 Added 4 PIE control tools: start_pie (viewport/new_window/simulate modes), stop_pie, get_pie_status (running/paused/simulating state), set_pie_paused. Enhanced execute_console_command with optional `target` param to route commands to the PIE world. Closes the build→test→debug feedback loop.
+
+### Upgrade 6: Blueprint Component Defaults (CDO) (DONE)
+Added `set_blueprint_component_defaults` tool to set properties on SCS component templates (CDO). This enables setting meshes, collision profiles, materials, and other defaults on Blueprint components — things that `set_object_property` and `set_component_property` cannot reach because SCS templates are not world actors. Every spawned instance inherits the values automatically.
 
 ## Future Roadmap
 

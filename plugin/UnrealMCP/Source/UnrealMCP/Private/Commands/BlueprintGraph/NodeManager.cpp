@@ -20,6 +20,7 @@
 #include "EditorAssetLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "GameFramework/Actor.h"
 
 TSharedPtr<FJsonObject> FBlueprintNodeManager::AddNode(const TSharedPtr<FJsonObject>& Params)
 {
@@ -305,21 +306,75 @@ UK2Node_Event* FBlueprintNodeManager::CreateEventNode(UEdGraph* Graph, const TSh
 		return nullptr;
 	}
 
+	// Map common event names to their UE function names and declaring classes
+	// Native events use "Receive" prefix and must point to the declaring UClass
 	if (EventType.Equals(TEXT("BeginPlay"), ESearchCase::IgnoreCase))
 	{
-		// Use direct function name - ReceiveBeginPlay is protected
-		EventNode->EventReference.SetExternalDelegateMember(FName(TEXT("ReceiveBeginPlay")));
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveBeginPlay")), AActor::StaticClass());
 		EventNode->bOverrideFunction = true;
 	}
 	else if (EventType.Equals(TEXT("Tick"), ESearchCase::IgnoreCase))
 	{
-		// Use direct function name - ReceiveTick is protected
-		EventNode->EventReference.SetExternalDelegateMember(FName(TEXT("ReceiveTick")));
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveTick")), AActor::StaticClass());
+		EventNode->bOverrideFunction = true;
+	}
+	else if (EventType.Equals(TEXT("ActorBeginOverlap"), ESearchCase::IgnoreCase))
+	{
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveActorBeginOverlap")), AActor::StaticClass());
+		EventNode->bOverrideFunction = true;
+	}
+	else if (EventType.Equals(TEXT("ActorEndOverlap"), ESearchCase::IgnoreCase))
+	{
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveActorEndOverlap")), AActor::StaticClass());
+		EventNode->bOverrideFunction = true;
+	}
+	else if (EventType.Equals(TEXT("Destroyed"), ESearchCase::IgnoreCase))
+	{
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveDestroyed")), AActor::StaticClass());
+		EventNode->bOverrideFunction = true;
+	}
+	else if (EventType.Equals(TEXT("AnyDamage"), ESearchCase::IgnoreCase))
+	{
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveAnyDamage")), AActor::StaticClass());
+		EventNode->bOverrideFunction = true;
+	}
+	else if (EventType.Equals(TEXT("ActorBeginCursorOver"), ESearchCase::IgnoreCase))
+	{
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveActorBeginCursorOver")), AActor::StaticClass());
+		EventNode->bOverrideFunction = true;
+	}
+	else if (EventType.Equals(TEXT("ActorEndCursorOver"), ESearchCase::IgnoreCase))
+	{
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveActorEndCursorOver")), AActor::StaticClass());
+		EventNode->bOverrideFunction = true;
+	}
+	else if (EventType.Equals(TEXT("Hit"), ESearchCase::IgnoreCase))
+	{
+		EventNode->EventReference.SetExternalMember(FName(TEXT("ReceiveHit")), AActor::StaticClass());
 		EventNode->bOverrideFunction = true;
 	}
 	else
 	{
-		EventNode->CustomFunctionName = FName(*EventType);
+		// Try to resolve as a native event (user may have passed "ReceiveXxx" directly)
+		UBlueprint* Blueprint = FBlueprintEditorUtils::FindBlueprintForGraph(Graph);
+		if (Blueprint && Blueprint->GeneratedClass)
+		{
+			FName FuncName = FName(*EventType);
+			UFunction* Func = Blueprint->GeneratedClass->FindFunctionByName(FuncName);
+			if (Func)
+			{
+				EventNode->EventReference.SetExternalMember(FuncName, Func->GetOwnerClass());
+				EventNode->bOverrideFunction = true;
+			}
+			else
+			{
+				EventNode->CustomFunctionName = FuncName;
+			}
+		}
+		else
+		{
+			EventNode->CustomFunctionName = FName(*EventType);
+		}
 	}
 
 	double PosX = 0.0;

@@ -65,3 +65,11 @@ public:
 	virtual TSharedPtr<FJsonObject> Execute(const TSharedPtr<FJsonObject>& Params) override;
 	virtual FString GetCommandName() const override { return TEXT("add_blueprint_component"); }
 };
+
+// --- Set Blueprint Component Defaults ---
+class FMCPSetBlueprintComponentDefaultsCommand : public FMCPCommandBase
+{
+public:
+	virtual TSharedPtr<FJsonObject> Execute(const TSharedPtr<FJsonObject>& Params) override;
+	virtual FString GetCommandName() const override { return TEXT("set_blueprint_component_defaults"); }
+};

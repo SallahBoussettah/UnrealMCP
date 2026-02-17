@@ -217,3 +217,44 @@ def register_blueprint_tools(mcp: FastMCP) -> None:
         if not result.get("success"):
             return f"Error: {result.get('error', 'Unknown error')}"
         return str(result.get("data", {}))
+
+    @mcp.tool()
+    async def set_blueprint_component_defaults(
+        asset_path: str,
+        component_name: str,
+        property_name: str,
+        property_value: str,
+    ) -> str:
+        """Set a default property value on a Blueprint's component template (CDO).
+
+        This sets properties on SCS component templates so that every spawned
+        instance of the Blueprint automatically inherits the value. Use this to
+        set meshes, collision profiles, materials, and other defaults on Blueprint
+        components — things that `set_object_property` and `set_component_property`
+        cannot reach because SCS templates are not world actors.
+
+        Args:
+            asset_path: Blueprint asset path (e.g., '/Game/Blueprints/BP_MyActor.BP_MyActor')
+            component_name: Name of the component as shown in the Blueprint editor
+                (the variable name, e.g., 'VisualMesh', 'DamageBox')
+            property_name: Property to set (e.g., 'StaticMesh', 'CollisionProfileName',
+                'RelativeLocation', 'Intensity', 'LightColor')
+            property_value: Value as a string in UE text format. Examples:
+                - StaticMesh: "/Engine/BasicShapes/Cube.Cube"
+                - CollisionProfileName: "OverlapAllDynamic"
+                - RelativeLocation: "(X=0.0,Y=0.0,Z=50.0)"
+                - Intensity: "5000.0"
+                - LightColor: "(R=255,G=0,B=0,A=255)"
+
+        Returns:
+            JSON with the component name, property name, and value that was set
+        """
+        result = await send_command("set_blueprint_component_defaults", {
+            "asset_path": asset_path,
+            "component_name": component_name,
+            "property_name": property_name,
+            "property_value": property_value,
+        })
+        if not result.get("success"):
+            return f"Error: {result.get('error', 'Unknown error')}"
+        return str(result.get("data", {}))

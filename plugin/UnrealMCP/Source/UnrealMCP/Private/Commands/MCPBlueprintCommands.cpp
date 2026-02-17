@@ -16,6 +16,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "UObject/SavePackage.h"
 #include "Logging/TokenizedMessage.h"
+#include "Components/PrimitiveComponent.h"
 
 static UBlueprint* LoadBlueprintFromPath(const FString& AssetPath)
 {
@@ -224,6 +225,9 @@ TSharedPtr<FJsonObject> FMCPCompileBlueprintCommand::Execute(const TSharedPtr<FJ
 		return ErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
+	// Force the Blueprint into dirty state so CompileBlueprint always regenerates bytecode
+	// Without this, CompileBlueprint may skip recompilation if Status is already BS_UpToDate
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 	FKismetEditorUtilities::CompileBlueprint(BP);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
@@ -433,5 +437,156 @@ TSharedPtr<FJsonObject> FMCPAddBlueprintComponentCommand::Execute(const TSharedP
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("component_name"), NewNode->GetVariableName().ToString());
 	Data->SetStringField(TEXT("component_class"), ComponentClass->GetName());
+	return SuccessResponse(Data);
+}
+
+// --- Set Blueprint Component Defaults ---
+TSharedPtr<FJsonObject> FMCPSetBlueprintComponentDefaultsCommand::Execute(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString ComponentName = Params->GetStringField(TEXT("component_name"));
+	FString PropertyName = Params->GetStringField(TEXT("property_name"));
+	FString PropertyValue = Params->GetStringField(TEXT("property_value"));
+
+	if (ComponentName.IsEmpty() || PropertyName.IsEmpty())
+	{
+		return ErrorResponse(TEXT("component_name and property_name are required"));
+	}
+
+	UBlueprint* BP = LoadBlueprintFromPath(AssetPath);
+	if (!BP)
+	{
+		return ErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	if (!BP->SimpleConstructionScript)
+	{
+		return ErrorResponse(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor-based BP?)"));
+	}
+
+	// Find the SCS node by component variable name
+	USCS_Node* TargetNode = nullptr;
+	for (USCS_Node* Node : BP->SimpleConstructionScript->GetAllNodes())
+	{
+		if (Node->GetVariableName().ToString() == ComponentName)
+		{
+			TargetNode = Node;
+			break;
+		}
+	}
+
+	if (!TargetNode)
+	{
+		// Build list of available components for the error message
+		TArray<FString> AvailableNames;
+		for (USCS_Node* Node : BP->SimpleConstructionScript->GetAllNodes())
+		{
+			AvailableNames.Add(Node->GetVariableName().ToString());
+		}
+		return ErrorResponse(FString::Printf(TEXT("Component '%s' not found in SCS. Available: [%s]"),
+			*ComponentName, *FString::Join(AvailableNames, TEXT(", "))));
+	}
+
+	UActorComponent* ComponentTemplate = TargetNode->ComponentTemplate;
+	if (!ComponentTemplate)
+	{
+		return ErrorResponse(FString::Printf(TEXT("Component '%s' has no template object"), *ComponentName));
+	}
+
+	// Special case: CollisionProfileName on primitive components (stored in BodyInstance struct)
+	if (PropertyName == TEXT("CollisionProfileName") || PropertyName == TEXT("BodyInstance.CollisionProfileName"))
+	{
+		UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(ComponentTemplate);
+		if (!PrimComp)
+		{
+			return ErrorResponse(FString::Printf(TEXT("Component '%s' is not a PrimitiveComponent, cannot set CollisionProfileName"), *ComponentName));
+		}
+		FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("MCP: Set %s.CollisionProfileName = %s"), *ComponentName, *PropertyValue)));
+		PrimComp->SetCollisionProfileName(FName(*PropertyValue));
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+
+		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+		Data->SetStringField(TEXT("component_name"), ComponentName);
+		Data->SetStringField(TEXT("property_name"), TEXT("CollisionProfileName"));
+		Data->SetStringField(TEXT("property_value"), PropertyValue);
+		Data->SetStringField(TEXT("component_class"), ComponentTemplate->GetClass()->GetName());
+		return SuccessResponse(Data);
+	}
+
+	// Resolve property - support dot-notation for nested struct properties (e.g. "BodyInstance.bNotifyRigidBodyCollision")
+	FProperty* Property = nullptr;
+	void* ContainerPtr = ComponentTemplate;
+
+	if (PropertyName.Contains(TEXT(".")))
+	{
+		TArray<FString> PropertyChain;
+		PropertyName.ParseIntoArray(PropertyChain, TEXT("."), true);
+
+		UStruct* CurrentStruct = ComponentTemplate->GetClass();
+		void* CurrentPtr = ComponentTemplate;
+
+		for (int32 i = 0; i < PropertyChain.Num(); ++i)
+		{
+			FProperty* ChainProp = CurrentStruct->FindPropertyByName(*PropertyChain[i]);
+			if (!ChainProp)
+			{
+				return ErrorResponse(FString::Printf(TEXT("Property '%s' not found in chain '%s' on component '%s' (class: %s)"),
+					*PropertyChain[i], *PropertyName, *ComponentName, *ComponentTemplate->GetClass()->GetName()));
+			}
+
+			if (i == PropertyChain.Num() - 1)
+			{
+				// Last in chain - this is the target property
+				Property = ChainProp;
+				ContainerPtr = CurrentPtr;
+			}
+			else
+			{
+				// Intermediate struct - navigate into it
+				FStructProperty* StructProp = CastField<FStructProperty>(ChainProp);
+				if (!StructProp)
+				{
+					return ErrorResponse(FString::Printf(TEXT("'%s' is not a struct property, cannot navigate further in '%s'"),
+						*PropertyChain[i], *PropertyName));
+				}
+				CurrentPtr = StructProp->ContainerPtrToValuePtr<void>(CurrentPtr);
+				CurrentStruct = StructProp->Struct;
+			}
+		}
+	}
+	else
+	{
+		Property = ComponentTemplate->GetClass()->FindPropertyByName(*PropertyName);
+		ContainerPtr = ComponentTemplate;
+	}
+
+	if (!Property)
+	{
+		return ErrorResponse(FString::Printf(TEXT("Property '%s' not found on component '%s' (class: %s)"),
+			*PropertyName, *ComponentName, *ComponentTemplate->GetClass()->GetName()));
+	}
+
+	// Set the property value
+	FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("MCP: Set %s.%s = %s"), *ComponentName, *PropertyName, *PropertyValue)));
+	ComponentTemplate->PreEditChange(Property);
+
+	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(ContainerPtr);
+	if (!Property->ImportText_Direct(*PropertyValue, ValuePtr, ComponentTemplate, PPF_None))
+	{
+		return ErrorResponse(FString::Printf(TEXT("Failed to set '%s' to '%s' (ImportText_Direct failed). Check value format."),
+			*PropertyName, *PropertyValue));
+	}
+
+	FPropertyChangedEvent ChangeEvent(Property);
+	ComponentTemplate->PostEditChangeProperty(ChangeEvent);
+
+	// Mark the blueprint as modified so it recompiles with the new defaults
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("component_name"), ComponentName);
+	Data->SetStringField(TEXT("property_name"), PropertyName);
+	Data->SetStringField(TEXT("property_value"), PropertyValue);
+	Data->SetStringField(TEXT("component_class"), ComponentTemplate->GetClass()->GetName());
 	return SuccessResponse(Data);
 }

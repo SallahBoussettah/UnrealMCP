@@ -2,13 +2,13 @@
 
 AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants like Claude create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, manage levels/maps, and run Play-in-Editor sessions — all through natural language.
 
-**52 tools** across 10 categories. Fully tested against a live UE5.6 editor.
+**53 tools** across 10 categories. Fully tested against a live UE5.6 editor.
 
 ## Architecture
 
 ```
 Claude Code ──stdio──> Python MCP Server ──TCP:55555──> C++ UE5 Editor Plugin
-                       (52 tools)                       (50 command handlers)
+                       (53 tools)                       (51 command handlers)
                        mcp-server/                      plugin/UnrealMCP/
 ```
 
@@ -51,9 +51,9 @@ Add to your `.claude.json` (or use `claude mcp add`):
 }
 ```
 
-## Tools (52 total)
+## Tools (53 total)
 
-### Blueprint Tools (8)
+### Blueprint Tools (9)
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
@@ -65,6 +65,7 @@ Add to your `.claude.json` (or use `claude mcp add`):
 | `add_blueprint_variable` | Add a typed member variable | `asset_path`, `variable_name`, `variable_type` (Boolean, Byte, Integer, Integer64, Float, Double, String, Text, Name, Vector, Rotator, Transform, Object, Class), `default_value`, `category`, `is_instance_editable` |
 | `remove_blueprint_variable` | Remove a member variable | `asset_path`, `variable_name` |
 | `add_blueprint_component` | Add a component to the hierarchy | `asset_path`, `component_class` (StaticMeshComponent, BoxCollisionComponent, PointLightComponent, etc.), `component_name`, `parent_component`, `location`, `rotation`, `scale` |
+| `set_blueprint_component_defaults` | Set a default property on a BP component template (CDO) | `asset_path`, `component_name`, `property_name` (StaticMesh, CollisionProfileName, etc.), `property_value` (UE text format) |
 
 ### Node Graph Tools (8)
 
@@ -265,10 +266,10 @@ This plugin integrates with UE 5.6's built-in MCP subsystem (`EpicUnrealMCPModul
 UnrealMCP/
   mcp-server/                  # Python MCP server
     src/unreal_mcp/
-      server.py                # Entry point, FastMCP setup (52 tools)
+      server.py                # Entry point, FastMCP setup (53 tools)
       connection.py            # TCP client (4-byte prefix protocol)
       tools/                   # Tool definitions by category
-        blueprint.py           #   8 Blueprint tools
+        blueprint.py           #   9 Blueprint tools
         node_graph.py          #   8 Node Graph tools
         actor.py               #   6 Actor tools
         property.py            #   5 Property tools
@@ -282,7 +283,7 @@ UnrealMCP/
     Source/UnrealMCP/
       Private/
         MCPTCPServer.cpp       # TCP listener, command dispatch, batch_execute
-        Commands/              # 50 command handlers by category
+        Commands/              # 51 command handlers by category
           MCPBlueprintCommands.cpp
           MCPNodeGraphCommands.cpp
           MCPActorCommands.cpp

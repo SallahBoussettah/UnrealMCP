@@ -398,6 +398,7 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPAddBlueprintVariableCommand>());
 	Register(MakeShared<FMCPRemoveBlueprintVariableCommand>());
 	Register(MakeShared<FMCPAddBlueprintComponentCommand>());
+	Register(MakeShared<FMCPSetBlueprintComponentDefaultsCommand>());
 
 	// Actor commands
 	Register(MakeShared<FMCPSpawnActorCommand>());
