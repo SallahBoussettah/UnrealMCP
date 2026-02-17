@@ -411,7 +411,7 @@ TSharedPtr<FJsonObject> FMCPCreateFunctionCommand::Execute(const TSharedPtr<FJso
 		UEdGraphSchema_K2::StaticClass()
 	);
 
-	FBlueprintEditorUtils::AddFunctionGraph(BP, FuncGraph, true, nullptr);
+	FBlueprintEditorUtils::AddFunctionGraph<UClass>(BP, FuncGraph, true, nullptr);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();

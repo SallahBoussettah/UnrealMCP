@@ -5,7 +5,7 @@
 	"FriendlyName": "UnrealMCP",
 	"Description": "MCP (Model Context Protocol) server plugin for AI-powered editor control. Enables AI assistants to read/modify Blueprints, manipulate actors, inspect properties, and more.",
 	"Category": "Editor",
-	"CreatedBy": "UnrealMCP",
+	"CreatedBy": "Salah Eddine Boussettah",
 	"EnabledByDefault": true,
 	"CanContainContent": false,
 	"IsBetaVersion": true,

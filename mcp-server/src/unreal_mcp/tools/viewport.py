@@ -1,8 +1,15 @@
 """Viewport screenshot tools for Unreal Engine."""
 
+import base64
+import os
+import time
+
 from mcp.server.fastmcp import FastMCP
 
 from ..connection import send_command
+
+# Save screenshots next to the MCP server by default
+SCREENSHOT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "screenshots")
 
 
 def register_viewport_tools(mcp: FastMCP) -> None:
@@ -12,15 +19,17 @@ def register_viewport_tools(mcp: FastMCP) -> None:
     async def take_screenshot(
         width: int = 1280,
         height: int = 720,
+        filename: str = "",
     ) -> str:
-        """Take a screenshot of the current editor viewport.
+        """Take a screenshot of the current editor viewport and save it as a PNG file.
 
         Args:
             width: Screenshot width in pixels (default: 1280)
             height: Screenshot height in pixels (default: 720)
+            filename: Custom filename (without extension). If empty, uses timestamp.
 
         Returns:
-            Base64-encoded PNG image data
+            Path to the saved PNG file
         """
         result = await send_command("take_screenshot", {
             "width": width,
@@ -28,7 +37,23 @@ def register_viewport_tools(mcp: FastMCP) -> None:
         })
         if not result.get("success"):
             return f"Error: {result.get('error', 'Unknown error')}"
-        return str(result.get("data", {}))
+
+        data = result.get("data", {})
+        b64_data = data.get("image_base64", "")
+        if not b64_data:
+            return "Error: No image data received from UE5"
+
+        # Decode and save
+        os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+        if not filename:
+            filename = f"screenshot_{int(time.time())}"
+        filepath = os.path.join(SCREENSHOT_DIR, f"{filename}.png")
+
+        img_bytes = base64.b64decode(b64_data)
+        with open(filepath, "wb") as f:
+            f.write(img_bytes)
+
+        return f"Screenshot saved: {filepath} ({len(img_bytes)} bytes, {width}x{height})"
 
     @mcp.tool()
     async def focus_viewport(

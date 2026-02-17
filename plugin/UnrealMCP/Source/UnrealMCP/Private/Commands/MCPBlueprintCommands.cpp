@@ -12,6 +12,9 @@
 #include "K2Node_FunctionResult.h"
 #include "EdGraphSchema_K2.h"
 #include "Misc/ScopedSlowTask.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/GameModeBase.h"
+#include "UObject/SavePackage.h"
 
 static UBlueprint* LoadBlueprintFromPath(const FString& AssetPath)
 {
@@ -95,7 +98,9 @@ TSharedPtr<FJsonObject> FMCPCreateBlueprintCommand::Execute(const TSharedPtr<FJs
 
 	// Save the package
 	FString PackageFileName = FPackageName::LongPackageNameToFilename(PackagePath, FPackageName::GetAssetPackageExtension());
-	UPackage::SavePackage(Package, NewBP, RF_Public | RF_Standalone, *PackageFileName);
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	UPackage::SavePackage(Package, NewBP, *PackageFileName, SaveArgs);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("name"), Name);

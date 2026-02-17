@@ -113,7 +113,7 @@ TSharedPtr<FJsonObject> FMCPSpawnActorCommand::Execute(const TSharedPtr<FJsonObj
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		NewActor = World->SpawnActor<AActor>(BP->GeneratedClass, &Location, &Rotation, SpawnParams);
+		NewActor = World->SpawnActor<AActor>(BP->GeneratedClass, Location, Rotation, SpawnParams);
 	}
 	else
 	{
@@ -135,7 +135,7 @@ TSharedPtr<FJsonObject> FMCPSpawnActorCommand::Execute(const TSharedPtr<FJsonObj
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		NewActor = World->SpawnActor<AActor>(ActorClass, &Location, &Rotation, SpawnParams);
+		NewActor = World->SpawnActor<AActor>(ActorClass, Location, Rotation, SpawnParams);
 	}
 
 	if (!NewActor)

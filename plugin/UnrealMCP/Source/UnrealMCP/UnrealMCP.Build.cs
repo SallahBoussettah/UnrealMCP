@@ -28,12 +28,11 @@ public class UnrealMCP : ModuleRules
 			"Slate",
 			"SlateCore",
 			"InputCore",
-			"EditorStyle",
 			"EditorScriptingUtilities",
 			"Json",
 			"JsonUtilities",
 			"ImageWrapper",
-			"SubobjectDataInterface",
+			"RenderCore",
 		});
 	}
 }

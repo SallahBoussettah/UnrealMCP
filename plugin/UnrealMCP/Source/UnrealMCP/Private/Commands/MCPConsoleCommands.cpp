@@ -99,10 +99,10 @@ TSharedPtr<FJsonObject> FMCPGetConsoleLogsCommand::Execute(const TSharedPtr<FJso
 	TArray<TSharedPtr<FJsonValue>> LogArray;
 	for (const FMCPLogCapture::FLogEntry& Entry : Logs)
 	{
-		TSharedPtr<FJsonObject> LogObj = MakeShared<FJsonObject>();
-		LogObj->SetStringField(TEXT("timestamp"), Entry.Timestamp.ToString());
-		LogObj->SetStringField(TEXT("category"), Entry.Category.ToString());
-		LogObj->SetStringField(TEXT("message"), Entry.Message);
+		TSharedPtr<FJsonObject> LogEntryObj = MakeShared<FJsonObject>();
+		LogEntryObj->SetStringField(TEXT("timestamp"), Entry.Timestamp.ToString());
+		LogEntryObj->SetStringField(TEXT("category"), Entry.Category.ToString());
+		LogEntryObj->SetStringField(TEXT("message"), Entry.Message);
 
 		FString VerbStr;
 		switch (Entry.Verbosity)
@@ -115,9 +115,9 @@ TSharedPtr<FJsonObject> FMCPGetConsoleLogsCommand::Execute(const TSharedPtr<FJso
 			case ELogVerbosity::Verbose: VerbStr = TEXT("Verbose"); break;
 			default: VerbStr = TEXT("Unknown"); break;
 		}
-		LogObj->SetStringField(TEXT("verbosity"), VerbStr);
+		LogEntryObj->SetStringField(TEXT("verbosity"), VerbStr);
 
-		LogArray.Add(MakeShared<FJsonValueObject>(LogObj));
+		LogArray.Add(MakeShared<FJsonValueObject>(LogEntryObj));
 	}
 
 	return SuccessResponse(LogArray);

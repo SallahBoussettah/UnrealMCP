@@ -23,7 +23,7 @@ logger = logging.getLogger("unreal-mcp")
 # Create the MCP server
 mcp = FastMCP(
     "UnrealMCP",
-    description=(
+    instructions=(
         "AI-powered control of Unreal Engine 5.6+ through the Model Context Protocol. "
         "Provides tools for Blueprint editing, node graph manipulation, property inspection, "
         "actor management, viewport screenshots, and console log reading."

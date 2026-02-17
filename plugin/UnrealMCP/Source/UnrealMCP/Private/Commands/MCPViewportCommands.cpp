@@ -9,34 +9,81 @@
 #include "GameFramework/Actor.h"
 #include "IImageWrapperModule.h"
 #include "IImageWrapper.h"
+#include "RenderingThread.h"
+#include "Framework/Application/SlateApplication.h"
+
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include <Windows.h>
+#ifndef PW_RENDERFULLCONTENT
+#define PW_RENDERFULLCONTENT 0x00000002
+#endif
+#include "Windows/HideWindowsPlatformTypes.h"
 
 // --- Take Screenshot ---
 TSharedPtr<FJsonObject> FMCPTakeScreenshotCommand::Execute(const TSharedPtr<FJsonObject>& Params)
 {
-	int32 Width = 1280;
-	int32 Height = 720;
-	Params->TryGetNumberField(TEXT("width"), Width);
-	Params->TryGetNumberField(TEXT("height"), Height);
-
-	if (!GEditor || !GEditor->GetActiveViewport())
+	if (!GEditor)
 	{
-		return ErrorResponse(TEXT("No active viewport available"));
+		return ErrorResponse(TEXT("No editor available"));
 	}
 
-	FViewport* Viewport = GEditor->GetActiveViewport();
-	if (!Viewport)
+	// Get the main editor window
+	TSharedPtr<SWindow> MainWindow = FSlateApplication::Get().GetActiveTopLevelRegularWindow();
+	if (!MainWindow.IsValid())
 	{
-		return ErrorResponse(TEXT("Failed to get active viewport"));
+		return ErrorResponse(TEXT("No active editor window found"));
 	}
+
+	TSharedPtr<FGenericWindow> NativeWindow = MainWindow->GetNativeWindow();
+	if (!NativeWindow.IsValid())
+	{
+		return ErrorResponse(TEXT("No native window handle available"));
+	}
+
+	HWND hWnd = reinterpret_cast<HWND>(NativeWindow->GetOSWindowHandle());
+	if (!hWnd)
+	{
+		return ErrorResponse(TEXT("Failed to get OS window handle"));
+	}
+
+	// Get window dimensions
+	RECT WindowRect;
+	GetClientRect(hWnd, &WindowRect);
+	int32 CaptureWidth = WindowRect.right - WindowRect.left;
+	int32 CaptureHeight = WindowRect.bottom - WindowRect.top;
+
+	if (CaptureWidth <= 0 || CaptureHeight <= 0)
+	{
+		return ErrorResponse(TEXT("Editor window has invalid size"));
+	}
+
+	// Capture the window using Win32
+	HDC hdcWindow = GetDC(hWnd);
+	HDC hdcMem = CreateCompatibleDC(hdcWindow);
+	HBITMAP hBitmap = CreateCompatibleBitmap(hdcWindow, CaptureWidth, CaptureHeight);
+	HGDIOBJ hOld = SelectObject(hdcMem, hBitmap);
+
+	// PW_RENDERFULLCONTENT captures the full window including DirectX/OpenGL content
+	PrintWindow(hWnd, hdcMem, PW_RENDERFULLCONTENT);
+
+	// Read pixel data
+	BITMAPINFOHEADER bi = {};
+	bi.biSize = sizeof(BITMAPINFOHEADER);
+	bi.biWidth = CaptureWidth;
+	bi.biHeight = -CaptureHeight; // negative = top-down
+	bi.biPlanes = 1;
+	bi.biBitCount = 32;
+	bi.biCompression = BI_RGB;
 
 	TArray<FColor> Bitmap;
-	int32 ViewportWidth = Viewport->GetSizeXY().X;
-	int32 ViewportHeight = Viewport->GetSizeXY().Y;
+	Bitmap.SetNum(CaptureWidth * CaptureHeight);
+	GetDIBits(hdcMem, hBitmap, 0, CaptureHeight, Bitmap.GetData(), reinterpret_cast<BITMAPINFO*>(&bi), DIB_RGB_COLORS);
 
-	if (!Viewport->ReadPixels(Bitmap))
-	{
-		return ErrorResponse(TEXT("Failed to read viewport pixels"));
-	}
+	// Cleanup GDI
+	SelectObject(hdcMem, hOld);
+	DeleteObject(hBitmap);
+	DeleteDC(hdcMem);
+	ReleaseDC(hWnd, hdcWindow);
 
 	// Encode as PNG using ImageWrapper
 	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
@@ -51,7 +98,7 @@ TSharedPtr<FJsonObject> FMCPTakeScreenshotCommand::Execute(const TSharedPtr<FJso
 	RawData.SetNum(Bitmap.Num() * 4);
 	FMemory::Memcpy(RawData.GetData(), Bitmap.GetData(), RawData.Num());
 
-	if (!ImageWrapper->SetRaw(RawData.GetData(), RawData.Num(), ViewportWidth, ViewportHeight, ERGBFormat::BGRA, 8))
+	if (!ImageWrapper->SetRaw(RawData.GetData(), RawData.Num(), CaptureWidth, CaptureHeight, ERGBFormat::BGRA, 8))
 	{
 		return ErrorResponse(TEXT("Failed to set raw image data"));
 	}
@@ -62,8 +109,8 @@ TSharedPtr<FJsonObject> FMCPTakeScreenshotCommand::Execute(const TSharedPtr<FJso
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("image_base64"), Base64);
-	Data->SetNumberField(TEXT("width"), ViewportWidth);
-	Data->SetNumberField(TEXT("height"), ViewportHeight);
+	Data->SetNumberField(TEXT("width"), CaptureWidth);
+	Data->SetNumberField(TEXT("height"), CaptureHeight);
 	Data->SetStringField(TEXT("format"), TEXT("png"));
 	return SuccessResponse(Data);
 }

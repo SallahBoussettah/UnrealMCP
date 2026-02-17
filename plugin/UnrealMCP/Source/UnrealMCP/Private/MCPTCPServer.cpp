@@ -200,7 +200,7 @@ bool FMCPTCPServer::ReadMessage(FSocket* ClientSocket, FString& OutMessage)
 
 	// Read the message body
 	TArray<uint8> Buffer;
-	Buffer.SetNumUninitialized(MessageLength);
+	Buffer.SetNumUninitialized(MessageLength + 1); // +1 for null terminator
 	TotalRead = 0;
 
 	while (TotalRead < MessageLength)
@@ -216,7 +216,8 @@ bool FMCPTCPServer::ReadMessage(FSocket* ClientSocket, FString& OutMessage)
 		TotalRead += BytesRead;
 	}
 
-	OutMessage = FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
+	Buffer[MessageLength] = 0; // Null-terminate the buffer
+	OutMessage = UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData()));
 	return true;
 }
 
@@ -242,9 +243,20 @@ bool FMCPTCPServer::SendResponse(FSocket* ClientSocket, const TSharedPtr<FJsonOb
 		return false;
 	}
 
-	if (!ClientSocket->Send(reinterpret_cast<const uint8*>(Converter.Get()), PayloadLength, BytesSent) || BytesSent != PayloadLength)
+	// Send payload in a loop to handle partial sends (important for large responses like screenshots)
+	const uint8* PayloadData = reinterpret_cast<const uint8*>(Converter.Get());
+	int32 TotalSent = 0;
+	while (TotalSent < PayloadLength)
 	{
-		return false;
+		if (!ClientSocket->Send(PayloadData + TotalSent, PayloadLength - TotalSent, BytesSent))
+		{
+			return false;
+		}
+		if (BytesSent == 0)
+		{
+			return false;
+		}
+		TotalSent += BytesSent;
 	}
 
 	return true;
