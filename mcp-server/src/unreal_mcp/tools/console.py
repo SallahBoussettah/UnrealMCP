@@ -1,0 +1,56 @@
+"""Console log reading tools for Unreal Engine."""
+
+from mcp.server.fastmcp import FastMCP
+
+from ..connection import send_command
+
+
+def register_console_tools(mcp: FastMCP) -> None:
+    """Register all console log reading MCP tools."""
+
+    @mcp.tool()
+    async def get_console_logs(
+        count: int = 50,
+        verbosity_filter: str = "",
+        category_filter: str = "",
+    ) -> str:
+        """Get recent console log messages from the Unreal Editor.
+
+        Args:
+            count: Maximum number of log messages to return (default: 50)
+            verbosity_filter: Filter by verbosity level. Options:
+                - '' (empty) - all messages
+                - 'Error' - errors only
+                - 'Warning' - warnings and errors
+                - 'Display' - display messages and above
+                - 'Log' - log messages and above
+            category_filter: Filter by log category (e.g., 'LogBlueprint', 'LogTemp', 'LogCompile')
+
+        Returns:
+            JSON array of log entries with timestamp, verbosity, category, and message
+        """
+        result = await send_command("get_console_logs", {
+            "count": count,
+            "verbosity_filter": verbosity_filter,
+            "category_filter": category_filter,
+        })
+        if not result.get("success"):
+            return f"Error: {result.get('error', 'Unknown error')}"
+        return str(result.get("data", {}))
+
+    @mcp.tool()
+    async def execute_console_command(command: str) -> str:
+        """Execute a console command in the Unreal Editor.
+
+        Args:
+            command: Console command to execute (e.g., 'stat fps', 'obj list')
+
+        Returns:
+            Command execution result and any output
+        """
+        result = await send_command("execute_console_command", {
+            "command": command,
+        })
+        if not result.get("success"):
+            return f"Error: {result.get('error', 'Unknown error')}"
+        return str(result.get("data", {}))

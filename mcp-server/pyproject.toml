@@ -1,0 +1,18 @@
+[project]
+name = "unreal-mcp"
+version = "0.1.0"
+description = "MCP Server for Unreal Engine 5.6+ - AI-powered editor control"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+unreal-mcp = "unreal_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
