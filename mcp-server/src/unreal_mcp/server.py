@@ -19,6 +19,7 @@ from .tools.batch import register_batch_tools
 from .tools.widget import register_widget_tools
 from .tools.anim import register_anim_tools
 from .tools.debug import register_debug_tools
+from .tools.datatable import register_datatable_tools
 
 # Configure logging
 logging.basicConfig(
@@ -38,7 +39,8 @@ mcp = FastMCP(
         "level/map management, asset import/Content Browser operations, "
         "Play-in-Editor (PIE) session control, UMG Widget Blueprint creation/editing, "
         "Animation Blueprint/state machine/blend space/montage creation, "
-        "and Blueprint debugging (breakpoints, stepping, watch values, call stack)."
+        "Blueprint debugging (breakpoints, stepping, watch values, call stack), "
+        "and DataTable editing (create, read, modify, delete rows, CSV import)."
     ),
 )
 
@@ -57,6 +59,7 @@ register_batch_tools(mcp)
 register_widget_tools(mcp)
 register_anim_tools(mcp)
 register_debug_tools(mcp)
+register_datatable_tools(mcp)
 
 logger.info("UnrealMCP server initialized with all tools registered")
 

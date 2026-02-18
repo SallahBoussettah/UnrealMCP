@@ -2,7 +2,7 @@
 
 ## Current State
 
-**75 MCP tools** | **70 C++ command handlers** | **44 Blueprint node types** | **14 categories**
+**81 MCP tools** | **76 C++ command handlers** | **44 Blueprint node types** | **15 categories**
 
 ### Completed Categories
 
@@ -22,6 +22,7 @@
 | Widget | 5 | Done |
 | Animation | 7 | Done |
 | Debug | 5 | Done |
+| DataTable | 6 | Done |
 
 ---
 
@@ -83,16 +84,16 @@ Create and edit Widget Blueprints programmatically. Every game needs UI.
 - [x] Blueprint Interface creation: `blueprint_type="Interface"` on `create_blueprint`
 - [x] `implement_interface` — New tool to add interface to a Blueprint
 
-### Priority 4 — Data Table Editing
+### Priority 4 — Data Table Editing ✓
 
 Almost every game uses DataTables for stats, items, dialogue, loot, etc.
 
-- [ ] `create_data_table` — Create a DataTable asset from a row struct
-- [ ] `add_data_table_row` — Add a row with field values
-- [ ] `modify_data_table_row` — Update specific fields in an existing row
-- [ ] `delete_data_table_row` — Remove a row by name
-- [ ] `get_data_table_rows` — Get all rows with their field values
-- [ ] `import_data_table_csv` — Import rows from a CSV file
+- [x] `create_data_table` — Create a DataTable asset from a row struct
+- [x] `add_data_table_row` — Add a row with field values
+- [x] `modify_data_table_row` — Update specific fields in an existing row
+- [x] `delete_data_table_row` — Remove a row by name (safe editor utils path, avoids UE 5.6 crash)
+- [x] `get_data_table_rows` — Get all rows with their field values (or a specific row)
+- [x] `import_data_table_csv` — Import rows from CSV string data (with append mode)
 
 ### Priority 5 — Sequencer / Cinematics
 

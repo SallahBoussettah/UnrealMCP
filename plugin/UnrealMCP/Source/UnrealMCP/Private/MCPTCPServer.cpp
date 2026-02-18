@@ -13,6 +13,7 @@
 #include "Commands/MCPWidgetCommands.h"
 #include "Commands/MCPAnimCommands.h"
 #include "Commands/MCPDebugCommands.h"
+#include "Commands/MCPDataTableCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -489,6 +490,14 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPGetWatchValuesCommand>());
 	Register(MakeShared<FMCPStepExecutionCommand>());
 	Register(MakeShared<FMCPGetCallStackCommand>());
+
+	// DataTable commands
+	Register(MakeShared<FMCPCreateDataTableCommand>());
+	Register(MakeShared<FMCPAddDataTableRowCommand>());
+	Register(MakeShared<FMCPModifyDataTableRowCommand>());
+	Register(MakeShared<FMCPDeleteDataTableRowCommand>());
+	Register(MakeShared<FMCPGetDataTableRowsCommand>());
+	Register(MakeShared<FMCPImportDataTableCSVCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }

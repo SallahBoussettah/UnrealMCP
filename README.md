@@ -51,7 +51,7 @@ Add to your `.claude.json` (or use `claude mcp add`):
 }
 ```
 
-## Tools (75 total)
+## Tools (81 total)
 
 ### Blueprint Tools (10)
 
@@ -269,6 +269,17 @@ Reroute         → node_type="Knot"
 | `step_execution` | Step Blueprint debugger | `step_type` (into, over, out, resume) |
 | `get_call_stack` | Get execution trace when paused | → returns current_instruction, breakpoint_hit, trace_stack[] |
 
+### DataTable Tools (6)
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `create_data_table` | Create a DataTable asset with a row struct | `asset_name`, `package_path`, `row_struct` (C++ name or Blueprint struct path) |
+| `add_data_table_row` | Add a row with field values | `asset_path`, `row_name`, `values` (JSON: field_name → UE text value) |
+| `modify_data_table_row` | Update specific fields in a row | `asset_path`, `row_name`, `values` (only changed fields) |
+| `delete_data_table_row` | Remove a row (safe path, avoids UE 5.6 crash) | `asset_path`, `row_name` |
+| `get_data_table_rows` | Get all rows or a specific row with field values | `asset_path`, `row_name` (optional) → returns struct info, columns, rows |
+| `import_data_table_csv` | Import rows from CSV string data | `asset_path`, `csv_data`, `append` (bool — clear vs. add) |
+
 ## What Can You Build With This?
 
 - **AI-assisted game prototyping** — Describe game mechanics in natural language, let the AI create Blueprints with the right nodes and connections
@@ -278,6 +289,7 @@ Reroute         → node_type="Knot"
 - **Runtime testing** — Start Play-in-Editor sessions, pause/resume gameplay, read runtime logs to verify behavior, debug at runtime
 - **Debugging** — Read console logs, inspect properties, take screenshots to understand editor state
 - **Batch operations** — Spawn dozens of actors, add many nodes, or wire up entire graphs in single tool calls
+- **Data-driven design** — Create and populate DataTables for items, stats, dialogue, and loot; import from CSV
 
 ## Technical Details
 
@@ -289,6 +301,7 @@ Reroute         → node_type="Knot"
 - **Levels**: `UEditorLoadingAndSavingUtils` (NewBlankMap, LoadMap), `UEditorLevelUtils` (streaming levels, visibility), `FEditorFileUtils` (save)
 - **Assets**: `UAutomatedAssetImportData` + `ImportAssetsAutomated()`, `IAssetRegistry::GetAssets()`, `UEditorAssetLibrary` (Delete, Rename)
 - **PIE**: `GEditor->RequestPlaySession()`, `StartQueuedPlaySessionRequest()`, `RequestEndPlayMap()`, `SetPIEWorldsPaused()`
+- **DataTables**: `UDataTableFactory`, `FDataTableEditorUtils::AddRow()`/`RemoveRow()`, `FProperty::ImportText_Direct()`/`ExportTextItem_Direct()`, `CreateTableFromCSVString()`
 - **Screenshots**: Win32 `PrintWindow()` with `PW_RENDERFULLCONTENT`, `IImageWrapper` PNG encoding
 - **Thread Safety**: All commands execute on game thread via `AsyncTask(ENamedThreads::GameThread)`, undo support via `FScopedTransaction`
 
