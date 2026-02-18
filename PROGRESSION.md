@@ -2,7 +2,7 @@
 
 ## Current State
 
-**62 MCP tools** | **57 C++ command handlers** | **44 Blueprint node types** | **12 categories**
+**69 MCP tools** | **64 C++ command handlers** | **44 Blueprint node types** | **13 categories**
 
 ### Completed Categories
 
@@ -20,6 +20,33 @@
 | PIE | 4 | Done |
 | Batch | 3 | Done |
 | Widget | 5 | Done |
+| Animation | 7 | Needs Test |
+
+---
+
+## Known Issues (HIGH PRIORITY)
+
+Bugs and limitations discovered during real-world Blueprint building. These block common workflows.
+
+### Blueprint Interfaces
+- **Cannot create Blueprint Interfaces** — BPI assets must be created manually (Right-click > Blueprints > Blueprint Interface)
+- **Cannot add function parameters to existing functions** — e.g. Caller input on Interact had to be added manually
+- **Cannot implement Blueprint Interface on a class** — Adding BPI to Class Settings > Interfaces must be done manually
+- **Cannot create Interface Message call nodes** — e.g. "Interact (Message)" targeting BPI_Interactable
+- **Cannot create Interface Event nodes** — e.g. Event Interact (from interface) must be added manually
+
+### Variable Type Issues
+- **Cannot create Object Reference variables** — e.g. `current_interactable` (Actor ref) had to be added manually
+- **Float variables created as Integer** — Variables specified as Float are created as int32. ToFloat conversion nodes auto-added as workaround
+- **Variable defaults may not apply** — bCanInteract defaulted to False instead of True, OpenAngle to 0 instead of 90, open_direction to 0 instead of 1
+
+### Missing Node Types
+- **Enhanced Input Action events** — EnhancedInputAction IA_Interact had to be added manually
+- **OnComponentBeginOverlap / OnComponentEndOverlap** delegate bindings had to be added manually
+
+### Component Properties
+- **GenerateOverlapEvents** — Verify setting sticks when set via `set_blueprint_component_defaults`
+- **CollisionProfileName** — Verify "OverlapAllDynamic" persists after compilation
 
 ---
 
@@ -36,17 +63,17 @@ Create and edit Widget Blueprints programmatically. Every game needs UI.
 - [x] `remove_widget` — Remove a widget from the hierarchy
 - [ ] `bind_widget_event` — Bind widget events to functions (deferred — requires event dispatcher wiring)
 
-### Priority 2 — Animation Blueprints & State Machines
+### Priority 2 — Animation Blueprints & State Machines (Needs Test)
 
-AnimBPs are among the most tedious things to set up manually.
+AnimBPs are among the most tedious things to set up manually. Fixes applied for entry node auto-connection and bool_variable auto-creation — awaiting retest.
 
-- [ ] `create_anim_blueprint` — Create an Animation Blueprint for a given Skeleton
-- [ ] `add_anim_state` — Add a state to an AnimGraph state machine (with animation asset)
-- [ ] `add_anim_transition` — Add a transition rule between states (with condition)
-- [ ] `set_anim_transition_rule` — Set the transition condition (bool variable, time remaining, etc.)
-- [ ] `add_blend_space` — Create a BlendSpace1D or BlendSpace2D asset
-- [ ] `add_anim_montage` — Create an AnimMontage from an animation sequence
-- [ ] `get_anim_graph` — Get the full state machine structure (states, transitions, conditions)
+- [x] `create_anim_blueprint` — Create an Animation Blueprint for a given Skeleton (with default state machine)
+- [x] `add_anim_state` — Add a state to an AnimGraph state machine (with optional animation asset)
+- [x] `add_anim_transition` — Add a transition between states (with crossfade duration and blend mode)
+- [~] `set_anim_transition_rule` — Set the transition condition (auto_rule, time_remaining, bool_variable) — **bool_variable fix untested**
+- [x] `add_blend_space` — Create a BlendSpace1D or BlendSpace2D asset (with axis config and samples)
+- [x] `add_anim_montage` — Create an AnimMontage from an animation sequence (with slot and sections)
+- [x] `get_anim_graph` — Get the full state machine structure (states, transitions, conditions)
 
 ### Priority 3 — Blueprint Debugging
 

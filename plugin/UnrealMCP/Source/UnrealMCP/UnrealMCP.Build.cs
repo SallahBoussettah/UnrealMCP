@@ -42,6 +42,8 @@ public class UnrealMCP : ModuleRules
 			"InputBlueprintNodes",
 			"UMG",
 			"UMGEditor",
+			"AnimGraph",
+			"AnimGraphRuntime",
 		});
 	}
 }

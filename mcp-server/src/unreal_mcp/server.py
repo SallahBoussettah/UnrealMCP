@@ -17,6 +17,7 @@ from .tools.asset import register_asset_tools
 from .tools.pie import register_pie_tools
 from .tools.batch import register_batch_tools
 from .tools.widget import register_widget_tools
+from .tools.anim import register_anim_tools
 
 # Configure logging
 logging.basicConfig(
@@ -34,7 +35,8 @@ mcp = FastMCP(
         "Provides tools for Blueprint editing, node graph manipulation, property inspection, "
         "actor management, viewport screenshots, console log reading, material editing, "
         "level/map management, asset import/Content Browser operations, "
-        "Play-in-Editor (PIE) session control, and UMG Widget Blueprint creation/editing."
+        "Play-in-Editor (PIE) session control, UMG Widget Blueprint creation/editing, "
+        "and Animation Blueprint/state machine/blend space/montage creation."
     ),
 )
 
@@ -51,6 +53,7 @@ register_asset_tools(mcp)
 register_pie_tools(mcp)
 register_batch_tools(mcp)
 register_widget_tools(mcp)
+register_anim_tools(mcp)
 
 logger.info("UnrealMCP server initialized with all tools registered")
 

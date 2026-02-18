@@ -11,6 +11,7 @@
 #include "Commands/MCPAssetCommands.h"
 #include "Commands/MCPPIECommands.h"
 #include "Commands/MCPWidgetCommands.h"
+#include "Commands/MCPAnimCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -470,6 +471,15 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPSetWidgetPropertyCommand>());
 	Register(MakeShared<FMCPGetWidgetTreeCommand>());
 	Register(MakeShared<FMCPRemoveWidgetCommand>());
+
+	// Animation commands
+	Register(MakeShared<FMCPCreateAnimBlueprintCommand>());
+	Register(MakeShared<FMCPAddAnimStateCommand>());
+	Register(MakeShared<FMCPAddAnimTransitionCommand>());
+	Register(MakeShared<FMCPSetAnimTransitionRuleCommand>());
+	Register(MakeShared<FMCPAddBlendSpaceCommand>());
+	Register(MakeShared<FMCPAddAnimMontageCommand>());
+	Register(MakeShared<FMCPGetAnimGraphCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }
