@@ -18,6 +18,8 @@
 #include "Logging/TokenizedMessage.h"
 #include "Components/PrimitiveComponent.h"
 
+namespace BlueprintCommandsLocal
+{
 static UBlueprint* LoadBlueprintFromPath(const FString& AssetPath)
 {
 	UObject* Asset = StaticLoadObject(UBlueprint::StaticClass(), nullptr, *AssetPath);
@@ -55,6 +57,9 @@ static UClass* FindClassByName(const FString& ClassName)
 
 	return nullptr;
 }
+} // namespace BlueprintCommandsLocal
+
+using namespace BlueprintCommandsLocal;
 
 // --- Create Blueprint ---
 TSharedPtr<FJsonObject> FMCPCreateBlueprintCommand::Execute(const TSharedPtr<FJsonObject>& Params)

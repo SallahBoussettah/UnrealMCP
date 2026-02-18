@@ -38,6 +38,9 @@
 #include "AnimGraphNode_StateResult.h"
 #include "K2Node_VariableGet.h"
 
+namespace AnimCommandsLocal
+{
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -275,6 +278,10 @@ static void SaveAssetPackage(UObject* Asset)
 	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
 	UPackage::SavePackage(Package, Asset, *PackageFileName, SaveArgs);
 }
+
+} // namespace AnimCommandsLocal
+
+using namespace AnimCommandsLocal;
 
 // ============================================================================
 // create_anim_blueprint

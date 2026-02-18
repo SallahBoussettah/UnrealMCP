@@ -1,20 +1,20 @@
 # UnrealMCP
 
-AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, manage levels/maps, run Play-in-Editor sessions, create UMG widgets, build Animation Blueprints, and debug Blueprints with breakpoints — all through natural language.
+AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, manage levels/maps, run Play-in-Editor sessions, create UMG widgets, build Animation Blueprints, debug Blueprints with breakpoints, edit DataTables, and set up Enhanced Input - all through natural language.
 
-**75 tools** across 14 categories, **44 Blueprint node types**, and **70 C++ command handlers**. Built for UE 5.6+.
+**86 tools** across 16 categories, **44 Blueprint node types**, and **81 C++ command handlers**. Built for UE 5.6+.
 
 ## Architecture
 
 ```
 AI Client ──stdio──> Python MCP Server ──TCP:55555──> C++ UE5 Editor Plugin
-                     (75 tools)                       (70 command handlers)
+                     (86 tools)                       (81 command handlers)
                      mcp-server/                      plugin/UnrealMCP/
 ```
 
-- **Python MCP Server** — Implements the MCP protocol over stdio. Translates tool calls into TCP commands.
-- **C++ UE5 Plugin** — Runs inside the Unreal Editor. Listens on TCP port 55555, executes commands on the game thread using native UE5 C++ APIs.
-- **Protocol** — 4-byte big-endian length prefix + JSON payload. UUID-based request/response matching. Supports payloads up to 10MB (for screenshots).
+- **Python MCP Server** - Implements the MCP protocol over stdio. Translates tool calls into TCP commands.
+- **C++ UE5 Plugin** - Runs inside the Unreal Editor. Listens on TCP port 55555, executes commands on the game thread using native UE5 C++ APIs.
+- **Protocol** - 4-byte big-endian length prefix + JSON payload. UUID-based request/response matching. Supports payloads up to 10MB (for screenshots).
 
 ## Quick Setup
 
@@ -72,7 +72,7 @@ Add to your `.claude.json` (or use `claude mcp add`):
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `add_node` | Add a node to a Blueprint graph | `asset_path`, `node_type` (44 types — see below), `function_name`, `target_class`, `node_position`, `params` |
+| `add_node` | Add a node to a Blueprint graph | `asset_path`, `node_type` (44 types - see below), `function_name`, `target_class`, `node_position`, `params` |
 | `get_graph_nodes` | Get all nodes with pins and connections | `asset_path`, `graph_name` → returns node IDs, classes, positions, pin details, connection map |
 | `connect_pins` | Connect an output pin to an input pin | `asset_path`, `source_node_id`, `source_pin_name`, `target_node_id`, `target_pin_name` |
 | `disconnect_pins` | Break all connections from a pin | `asset_path`, `node_id`, `pin_name` |
@@ -91,19 +91,19 @@ Add to your `.claude.json` (or use `claude mcp add`):
 | **Events** | `Event` | Built-in event | params: `event_name` |
 | | `CustomEvent` | Custom event | params: `event_name` |
 | | `EnhancedInputAction` | Enhanced Input event | params: `input_action_path` |
-| | `Self` | Self reference | — |
+| | `Self` | Self reference | - |
 | **Variables** | `VariableGet` | Get variable | params: `variable_name` |
 | | `VariableSet` | Set variable | params: `variable_name` |
-| **Flow Control** | `Branch` | If/else | — |
-| | `Sequence` | Execution sequence | — |
-| | `MultiGate` | Multiple exec outputs | — |
-| | `Select` | Select by index | — |
-| | `DoOnceMultiInput` | Multi-input DoOnce | — |
+| **Flow Control** | `Branch` | If/else | - |
+| | `Sequence` | Execution sequence | - |
+| | `MultiGate` | Multiple exec outputs | - |
+| | `Select` | Select by index | - |
+| | `DoOnceMultiInput` | Multi-input DoOnce | - |
 | | `MacroInstance` | Standard macros (ForLoop, DoOnce, WhileLoop, ForEachLoop, Gate, FlipFlop, DoN, IsValid) | params: `macro_name` |
 | | `ForEachElementInEnum` | Loop over enum values | params: `enum_name` |
-| **Switch** | `SwitchInteger` | Switch on int | — |
-| | `SwitchString` | Switch on string | — |
-| | `SwitchName` | Switch on FName | — |
+| **Switch** | `SwitchInteger` | Switch on int | - |
+| | `SwitchString` | Switch on string | - |
+| | `SwitchName` | Switch on FName | - |
 | | `SwitchEnum` | Switch on enum | params: `enum_name` |
 | **Casting** | `DynamicCast` | Cast To | params: `target_class` |
 | | `ClassDynamicCast` | Class cast | params: `target_class` |
@@ -111,25 +111,25 @@ Add to your `.claude.json` (or use `claude mcp add`):
 | | `BreakStruct` | Break struct | params: `struct_type` |
 | | `SetFieldsInStruct` | Set struct fields | params: `struct_type` |
 | **Containers** | `MakeArray` | Make array literal | Optional: `num_inputs` |
-| | `MakeMap` | Make map literal | — |
-| | `MakeSet` | Make set literal | — |
-| | `GetArrayItem` | Array index access | — |
-| **Spawning** | `SpawnActorFromClass` | Spawn Actor node | — (set class via pin) |
-| | `GenericCreateObject` | Construct Object | — (set class via pin) |
-| | `AddComponentByClass` | Add Component | — (set class via pin) |
-| **Delegates** | `CreateDelegate` | Create delegate binding | — |
+| | `MakeMap` | Make map literal | - |
+| | `MakeSet` | Make set literal | - |
+| | `GetArrayItem` | Array index access | - |
+| **Spawning** | `SpawnActorFromClass` | Spawn Actor node | - (set class via pin) |
+| | `GenericCreateObject` | Construct Object | - (set class via pin) |
+| | `AddComponentByClass` | Add Component | - (set class via pin) |
+| **Delegates** | `CreateDelegate` | Create delegate binding | - |
 | | `AddDelegate` | Bind to dispatcher | params: `delegate_name` |
 | | `RemoveDelegate` | Unbind from dispatcher | params: `delegate_name` |
 | | `CallDelegate` | Fire dispatcher | params: `delegate_name` |
 | | `ClearDelegate` | Clear all bindings | params: `delegate_name` |
-| **Text** | `FormatText` | Format Text with wildcards | — |
+| **Text** | `FormatText` | Format Text with wildcards | - |
 | | `EnumLiteral` | Enum value literal | params: `enum_name` |
 | **Misc** | `Timeline` | Timeline | params: `timeline_name` |
-| | `Knot` | Reroute node | — |
-| | `LoadAsset` | Async load asset | — |
-| | `EaseFunction` | Ease/interpolation | — |
-| | `GetClassDefaults` | Get Class Defaults | — (set class via pin) |
-| | `GetDataTableRow` | Data table lookup | — (set table via pin) |
+| | `Knot` | Reroute node | - |
+| | `LoadAsset` | Async load asset | - |
+| | `EaseFunction` | Ease/interpolation | - |
+| | `GetClassDefaults` | Get Class Defaults | - (set class via pin) |
+| | `GetDataTableRow` | Data table lookup | - (set table via pin) |
 
 **`add_node` examples:**
 ```
@@ -159,7 +159,7 @@ Reroute         → node_type="Knot"
 |------|-------------|----------------|
 | `spawn_actor` | Spawn an actor or Blueprint instance | `actor_class` (StaticMeshActor, PointLight, CameraActor, etc.), `name`, `location`, `rotation`, `scale`, `blueprint_path` |
 | `delete_actor` | Delete an actor from the level | `actor_name` |
-| `set_actor_transform` | Set position, rotation, and/or scale | `actor_name`, `location`, `rotation`, `scale` (each optional — only provided values change) |
+| `set_actor_transform` | Set position, rotation, and/or scale | `actor_name`, `location`, `rotation`, `scale` (each optional - only provided values change) |
 | `get_actors_in_level` | List all actors (World Outliner) | `class_filter`, `name_filter`, `tag_filter` → returns name, class, location, rotation, scale |
 | `find_actors` | Search actors by name pattern | `query` (substring match) |
 | `duplicate_actor` | Duplicate an actor with offset | `actor_name`, `new_name`, `location_offset` |
@@ -217,7 +217,7 @@ Reroute         → node_type="Knot"
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `get_console_logs` | Read recent log messages | `count`, `verbosity_filter` (Error, Warning, Display, Log), `category_filter` (LogBlueprint, LogTemp, LogCompile, etc.) |
-| `execute_console_command` | Run a console command in the editor or PIE world | `command` (e.g., `stat fps`, `obj list`), `target` (`"editor"` or `"pie"` — default: editor) |
+| `execute_console_command` | Run a console command in the editor or PIE world | `command` (e.g., `stat fps`, `obj list`), `target` (`"editor"` or `"pie"` - default: editor) |
 | `batch_execute` | Execute multiple commands in one TCP round-trip | `commands` [{command, params}, ...], `stop_on_error` |
 
 ### PIE Tools (4)
@@ -278,18 +278,29 @@ Reroute         → node_type="Knot"
 | `modify_data_table_row` | Update specific fields in a row | `asset_path`, `row_name`, `values` (only changed fields) |
 | `delete_data_table_row` | Remove a row (safe path, avoids UE 5.6 crash) | `asset_path`, `row_name` |
 | `get_data_table_rows` | Get all rows or a specific row with field values | `asset_path`, `row_name` (optional) → returns struct info, columns, rows |
-| `import_data_table_csv` | Import rows from CSV string data | `asset_path`, `csv_data`, `append` (bool — clear vs. add) |
+| `import_data_table_csv` | Import rows from CSV string data | `asset_path`, `csv_data`, `append` (bool - clear vs. add) |
+
+### Input Tools (5)
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `create_input_action` | Create an Enhanced Input Action asset | `asset_name`, `package_path`, `value_type` (Boolean, Axis1D, Axis2D, Axis3D), `consume_input`, `trigger_when_paused` |
+| `create_input_mapping_context` | Create an Input Mapping Context asset | `asset_name`, `package_path` |
+| `add_input_mapping` | Map a key to an InputAction with modifiers and triggers | `context_path`, `action_path`, `key` (FKey name), `modifiers` (Negate, SwizzleAxis, DeadZone, Scalar), `triggers` (Down, Pressed, Released, Hold, Tap) |
+| `remove_input_mapping` | Remove a mapping by key+action, all keys for an action, or all actions for a key | `context_path`, `action_path` (optional), `key` (optional - at least one required) |
+| `get_input_mapping_context` | Read all mappings from a context | `context_path` → returns mappings with action, key, modifiers[], triggers[] |
 
 ## What Can You Build With This?
 
-- **AI-assisted game prototyping** — Describe game mechanics in natural language, let the AI create Blueprints with the right nodes and connections
-- **Automated Blueprint construction** — Programmatically build complex node graphs (health systems, inventory, AI behavior) and auto-layout them
-- **Level design assistance** — Create/load/save maps, manage streaming sub-levels, spawn actors, set transforms, assign materials
-- **Asset management** — Import meshes/textures/sounds from disk, search the Content Browser, inspect asset metadata, rename and organize assets
-- **Runtime testing** — Start Play-in-Editor sessions, pause/resume gameplay, read runtime logs to verify behavior, debug at runtime
-- **Debugging** — Read console logs, inspect properties, take screenshots to understand editor state
-- **Batch operations** — Spawn dozens of actors, add many nodes, or wire up entire graphs in single tool calls
-- **Data-driven design** — Create and populate DataTables for items, stats, dialogue, and loot; import from CSV
+- **AI-assisted game prototyping** - Describe game mechanics in natural language, let the AI create Blueprints with the right nodes and connections
+- **Automated Blueprint construction** - Programmatically build complex node graphs (health systems, inventory, AI behavior) and auto-layout them
+- **Level design assistance** - Create/load/save maps, manage streaming sub-levels, spawn actors, set transforms, assign materials
+- **Asset management** - Import meshes/textures/sounds from disk, search the Content Browser, inspect asset metadata, rename and organize assets
+- **Runtime testing** - Start Play-in-Editor sessions, pause/resume gameplay, read runtime logs to verify behavior, debug at runtime
+- **Debugging** - Read console logs, inspect properties, take screenshots to understand editor state
+- **Batch operations** - Spawn dozens of actors, add many nodes, or wire up entire graphs in single tool calls
+- **Data-driven design** - Create and populate DataTables for items, stats, dialogue, and loot; import from CSV
+- **Input setup** - Create InputActions and InputMappingContexts, configure WASD/gamepad bindings with modifiers and triggers
 
 ## Technical Details
 
@@ -302,11 +313,12 @@ Reroute         → node_type="Knot"
 - **Assets**: `UAutomatedAssetImportData` + `ImportAssetsAutomated()`, `IAssetRegistry::GetAssets()`, `UEditorAssetLibrary` (Delete, Rename)
 - **PIE**: `GEditor->RequestPlaySession()`, `StartQueuedPlaySessionRequest()`, `RequestEndPlayMap()`, `SetPIEWorldsPaused()`
 - **DataTables**: `UDataTableFactory`, `FDataTableEditorUtils::AddRow()`/`RemoveRow()`, `FProperty::ImportText_Direct()`/`ExportTextItem_Direct()`, `CreateTableFromCSVString()`
+- **Enhanced Input**: `UInputAction` (ValueType), `UInputMappingContext::MapKey()`, `UInputModifierNegate`/`SwizzleAxis`/`DeadZone`/`Scalar`, `UInputTriggerDown`/`Pressed`/`Released`/`Hold`/`Tap`
 - **Screenshots**: Win32 `PrintWindow()` with `PW_RENDERFULLCONTENT`, `IImageWrapper` PNG encoding
 - **Thread Safety**: All commands execute on game thread via `AsyncTask(ENamedThreads::GameThread)`, undo support via `FScopedTransaction`
 
 ### UE 5.6 Compatibility
-This plugin integrates with UE 5.6's built-in MCP subsystem (`EpicUnrealMCPModule`). Our TCP server runs on port 55555 alongside Epic's built-in bridge on port 55557 — both operate independently without conflict.
+This plugin integrates with UE 5.6's built-in MCP subsystem (`EpicUnrealMCPModule`). Our TCP server runs on port 55555 alongside Epic's built-in bridge on port 55557 - both operate independently without conflict.
 
 ## Requirements
 
@@ -340,11 +352,13 @@ UnrealMCP/
         widget.py              #   5 Widget tools
         anim.py                #   7 Animation tools
         debug.py               #   5 Debug tools
+        datatable.py           #   6 DataTable tools
+        input.py               #   4 Input tools
   plugin/UnrealMCP/            # C++ UE5 editor plugin
     Source/UnrealMCP/
       Private/
         MCPTCPServer.cpp       # TCP listener, command dispatch, batch_execute
-        Commands/              # 70 command handlers by category
+        Commands/              # 80 command handlers by category
       Public/
         Commands/              # Header files
 ```

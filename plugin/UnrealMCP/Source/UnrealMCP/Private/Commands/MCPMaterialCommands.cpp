@@ -17,6 +17,8 @@
 #include "AssetToolsModule.h"
 #include "MaterialEditingLibrary.h"
 
+namespace MaterialCommandsLocal
+{
 static AActor* FindActorByNameInWorld(const FString& ActorName)
 {
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -31,6 +33,9 @@ static AActor* FindActorByNameInWorld(const FString& ActorName)
 	}
 	return nullptr;
 }
+} // namespace MaterialCommandsLocal
+
+using namespace MaterialCommandsLocal;
 
 // --- Create Material ---
 TSharedPtr<FJsonObject> FMCPCreateMaterialCommand::Execute(const TSharedPtr<FJsonObject>& Params)

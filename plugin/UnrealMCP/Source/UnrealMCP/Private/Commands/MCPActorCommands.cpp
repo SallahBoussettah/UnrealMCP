@@ -11,6 +11,8 @@
 #include "Engine/Selection.h"
 #include "ScopedTransaction.h"
 
+namespace ActorCommandsLocal
+{
 static UWorld* GetEditorWorld()
 {
 	return GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -65,6 +67,9 @@ static TSharedPtr<FJsonObject> ActorToJson(AActor* Actor)
 
 	return Info;
 }
+} // namespace ActorCommandsLocal
+
+using namespace ActorCommandsLocal;
 
 // --- Spawn Actor ---
 TSharedPtr<FJsonObject> FMCPSpawnActorCommand::Execute(const TSharedPtr<FJsonObject>& Params)

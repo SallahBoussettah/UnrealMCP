@@ -11,6 +11,9 @@
 #include "Particles/ParticleSystem.h"
 #include "Factories/Factory.h"
 
+namespace AssetCommandsLocal
+{
+
 // Type name to UClass mapping for search_assets filtering
 static UClass* ResolveAssetClass(const FString& TypeName)
 {
@@ -129,6 +132,10 @@ static UFactory* FindLegacyFactoryForExtension(const FString& Extension)
 	if (!BestClass) return nullptr;
 	return NewObject<UFactory>(GetTransientPackage(), BestClass);
 }
+
+} // namespace AssetCommandsLocal
+
+using namespace AssetCommandsLocal;
 
 // --- Import Asset ---
 TSharedPtr<FJsonObject> FMCPImportAssetCommand::Execute(const TSharedPtr<FJsonObject>& Params)

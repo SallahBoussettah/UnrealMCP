@@ -14,6 +14,7 @@
 #include "Commands/MCPAnimCommands.h"
 #include "Commands/MCPDebugCommands.h"
 #include "Commands/MCPDataTableCommands.h"
+#include "Commands/MCPInputCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -498,6 +499,13 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPDeleteDataTableRowCommand>());
 	Register(MakeShared<FMCPGetDataTableRowsCommand>());
 	Register(MakeShared<FMCPImportDataTableCSVCommand>());
+
+	// Input commands
+	Register(MakeShared<FMCPCreateInputActionCommand>());
+	Register(MakeShared<FMCPCreateInputMappingContextCommand>());
+	Register(MakeShared<FMCPAddInputMappingCommand>());
+	Register(MakeShared<FMCPRemoveInputMappingCommand>());
+	Register(MakeShared<FMCPGetInputMappingContextCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }

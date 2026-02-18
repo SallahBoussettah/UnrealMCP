@@ -80,6 +80,8 @@
 // For Timeline template
 #include "Engine/TimelineTemplate.h"
 
+namespace NodeGraphCommandsLocal
+{
 static UBlueprint* LoadBP(const FString& AssetPath)
 {
 	return Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *AssetPath));
@@ -223,6 +225,9 @@ static TSharedPtr<FJsonObject> NodeToJson(UEdGraphNode* Node)
 
 	return Info;
 }
+} // namespace NodeGraphCommandsLocal
+
+using namespace NodeGraphCommandsLocal;
 
 // --- Add Node ---
 TSharedPtr<FJsonObject> FMCPAddNodeCommand::Execute(const TSharedPtr<FJsonObject>& Params)
@@ -1120,6 +1125,8 @@ TSharedPtr<FJsonObject> FMCPSetPinValueCommand::Execute(const TSharedPtr<FJsonOb
 }
 
 // Helper: Convert a type string to FEdGraphPinType (shared mapping for function params and variables)
+namespace NodeGraphCommandsLocal
+{
 static FEdGraphPinType StringToPinType(const FString& TypeStr)
 {
 	FEdGraphPinType PinType;
@@ -1192,6 +1199,7 @@ static FEdGraphPinType StringToPinType(const FString& TypeStr)
 
 	return PinType;
 }
+} // namespace NodeGraphCommandsLocal (StringToPinType)
 
 // --- Create Function ---
 TSharedPtr<FJsonObject> FMCPCreateFunctionCommand::Execute(const TSharedPtr<FJsonObject>& Params)
@@ -1328,6 +1336,8 @@ TSharedPtr<FJsonObject> FMCPDeleteFunctionCommand::Execute(const TSharedPtr<FJso
 
 // --- Arrange Nodes (auto-layout) ---
 
+namespace NodeGraphCommandsLocal
+{
 // Helper: check if a node has any exec pins (input or output)
 static bool NodeHasExecPins(UEdGraphNode* Node)
 {
@@ -1373,6 +1383,7 @@ static bool HasExecInputConnections(UEdGraphNode* Node)
 	}
 	return false;
 }
+} // namespace NodeGraphCommandsLocal (arrange helpers)
 
 TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonObject>& Params)
 {

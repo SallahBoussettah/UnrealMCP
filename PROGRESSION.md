@@ -2,7 +2,7 @@
 
 ## Current State
 
-**81 MCP tools** | **76 C++ command handlers** | **44 Blueprint node types** | **15 categories**
+**86 MCP tools** | **81 C++ command handlers** | **44 Blueprint node types** | **16 categories**
 
 ### Completed Categories
 
@@ -23,6 +23,7 @@
 | Animation | 7 | Done |
 | Debug | 5 | Done |
 | DataTable | 6 | Done |
+| Input | 5 | Done |
 
 ---
 
@@ -106,14 +107,15 @@ Create cinematic sequences and scripted events.
 - [ ] `get_sequence_info` — Get tracks, keyframes, and playback settings
 - [ ] `add_camera_cut_track` — Add camera cuts for cinematic shots
 
-### Priority 6 — Enhanced Input Mapping
+### Priority 6 — Enhanced Input Mapping ✓
 
 Complete the input pipeline (node type already exists, but no asset creation).
 
-- [ ] `create_input_action` — Create an InputAction asset (value type: bool, float, Vector2D, Vector3D)
-- [ ] `create_input_mapping_context` — Create an InputMappingContext asset
-- [ ] `add_input_mapping` — Map a key/gamepad input to an InputAction with modifiers and triggers
-- [ ] `get_input_mapping_context` — Get all mappings in a context
+- [x] `create_input_action` — Create an InputAction asset (Boolean, Axis1D, Axis2D, Axis3D)
+- [x] `create_input_mapping_context` — Create an InputMappingContext asset
+- [x] `add_input_mapping` — Map a key to an InputAction with modifiers (Negate, SwizzleAxis, DeadZone, Scalar) and triggers (Down, Pressed, Released, Hold, Tap)
+- [x] `remove_input_mapping` — Remove a mapping by key, action, or both (uses UnmapKey/UnmapAllKeysFromAction)
+- [x] `get_input_mapping_context` — Get all mappings in a context with full modifier/trigger details
 
 ### Priority 7 — Source Control Integration
 

@@ -5,6 +5,9 @@
 #include "AssetToolsModule.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 
+namespace DataTableCommandsLocal
+{
+
 // ---------------------------------------------------------------------------
 // Helper: Resolve a row struct from a name or asset path
 // ---------------------------------------------------------------------------
@@ -131,6 +134,10 @@ static TArray<TSharedPtr<FJsonValue>> GetColumnInfo(const UScriptStruct* RowStru
 	}
 	return Columns;
 }
+
+} // namespace DataTableCommandsLocal
+
+using namespace DataTableCommandsLocal;
 
 // ===================================================================
 // create_data_table

@@ -6,6 +6,8 @@
 #include "UObject/UnrealType.h"
 #include "ScopedTransaction.h"
 
+namespace PropertyCommandsLocal
+{
 static UWorld* GetEditorWorld()
 {
 	return GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -46,6 +48,9 @@ static TSharedPtr<FJsonObject> PropertyToJson(FProperty* Prop, const void* Conta
 
 	return Info;
 }
+} // namespace PropertyCommandsLocal
+
+using namespace PropertyCommandsLocal;
 
 // --- Get Object Properties ---
 TSharedPtr<FJsonObject> FMCPGetObjectPropertiesCommand::Execute(const TSharedPtr<FJsonObject>& Params)

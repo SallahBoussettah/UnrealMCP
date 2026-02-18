@@ -11,6 +11,9 @@
 #include "Editor.h"
 #include "Engine/BlueprintGeneratedClass.h"
 
+namespace DebugCommandsLocal
+{
+
 static UBlueprint* LoadBlueprintForDebug(const FString& AssetPath)
 {
 	return Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *AssetPath));
@@ -34,6 +37,10 @@ static UEdGraphNode* FindNodeInBlueprint(UBlueprint* BP, const FString& NodeId, 
 	}
 	return nullptr;
 }
+
+} // namespace DebugCommandsLocal
+
+using namespace DebugCommandsLocal;
 
 // --- Set Breakpoint ---
 TSharedPtr<FJsonObject> FMCPSetBreakpointCommand::Execute(const TSharedPtr<FJsonObject>& Params)

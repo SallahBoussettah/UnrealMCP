@@ -11,6 +11,9 @@
 #include "HAL/FileManager.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 
+namespace LevelCommandsLocal
+{
+
 // Helper: save a world package directly without any UI dialogs
 static bool SaveWorldPackage(UWorld* World, const FString& PackagePath)
 {
@@ -115,6 +118,10 @@ static ULevelStreaming* FindStreamingLevelByName(UWorld* World, const FString& P
 	}
 	return nullptr;
 }
+
+} // namespace LevelCommandsLocal
+
+using namespace LevelCommandsLocal;
 
 // --- Get Level Info ---
 TSharedPtr<FJsonObject> FMCPGetLevelInfoCommand::Execute(const TSharedPtr<FJsonObject>& Params)

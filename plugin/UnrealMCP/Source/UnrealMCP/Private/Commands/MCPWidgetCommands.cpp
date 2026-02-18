@@ -32,6 +32,9 @@
 #include "Components/GridPanel.h"
 #include "Components/PanelWidget.h"
 
+namespace WidgetCommandsLocal
+{
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -203,6 +206,10 @@ static UWidget* ConstructWidgetByType(UWidgetTree* WidgetTree, const FString& Wi
 
 	return nullptr;
 }
+
+} // namespace WidgetCommandsLocal
+
+using namespace WidgetCommandsLocal;
 
 // ============================================================================
 // create_widget_blueprint
