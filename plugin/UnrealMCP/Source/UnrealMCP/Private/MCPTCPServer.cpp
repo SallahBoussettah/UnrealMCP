@@ -10,6 +10,7 @@
 #include "Commands/MCPLevelCommands.h"
 #include "Commands/MCPAssetCommands.h"
 #include "Commands/MCPPIECommands.h"
+#include "Commands/MCPWidgetCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -462,6 +463,13 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPStopPIECommand>());
 	Register(MakeShared<FMCPGetPIEStatusCommand>());
 	Register(MakeShared<FMCPSetPIEPausedCommand>());
+
+	// Widget commands
+	Register(MakeShared<FMCPCreateWidgetBlueprintCommand>());
+	Register(MakeShared<FMCPAddWidgetCommand>());
+	Register(MakeShared<FMCPSetWidgetPropertyCommand>());
+	Register(MakeShared<FMCPGetWidgetTreeCommand>());
+	Register(MakeShared<FMCPRemoveWidgetCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }

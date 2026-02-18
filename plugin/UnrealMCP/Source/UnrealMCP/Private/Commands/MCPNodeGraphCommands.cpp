@@ -1360,6 +1360,14 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 		}
 	}
 
+	// Helper: estimate node height from pin count
+	auto EstimateNodeHeight = [](UEdGraphNode* Node) -> int32
+	{
+		int32 NumPins = Node ? Node->Pins.Num() : 0;
+		// Header ~50px + ~26px per pin, minimum 80px
+		return FMath::Max(80, 50 + NumPins * 26);
+	};
+
 	// Phase 4: Group nodes by subgraph + layer
 	// Phase 5: Assign positions — layers = X columns, vertical stacking within layer
 	int32 GlobalYOffset = 0;
@@ -1381,22 +1389,24 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 			if (Layer > MaxLayer) MaxLayer = Layer;
 		}
 
-		// Place exec nodes
-		int32 SubgraphMaxY = 0;
+		// Place exec nodes — track per-column Y cursor for accurate stacking
+		int32 SubgraphMaxY = GlobalYOffset;
 		for (int32 Layer = 0; Layer <= MaxLayer; ++Layer)
 		{
 			TArray<UEdGraphNode*>* NodesInLayer = LayerToNodes.Find(Layer);
 			if (!NodesInLayer) continue;
 
+			int32 LayerY = GlobalYOffset;
 			for (int32 Idx = 0; Idx < NodesInLayer->Num(); ++Idx)
 			{
 				UEdGraphNode* Node = (*NodesInLayer)[Idx];
 				Node->NodePosX = Layer * HSpacing;
-				Node->NodePosY = GlobalYOffset + Idx * VSpacing;
+				Node->NodePosY = LayerY;
 
-				int32 BottomY = Node->NodePosY + VSpacing;
-				if (BottomY > SubgraphMaxY) SubgraphMaxY = BottomY;
+				int32 NodeHeight = EstimateNodeHeight(Node);
+				LayerY += NodeHeight + VSpacing;
 			}
+			if (LayerY > SubgraphMaxY) SubgraphMaxY = LayerY;
 		}
 
 		// Phase 6: Place data-only nodes near their consumers within this subgraph
@@ -1417,7 +1427,7 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 					// Place data node to the left and below its consumer
 					DataNode->NodePosX = Node->NodePosX - (HSpacing / 2);
 					DataNode->NodePosY = SubgraphMaxY;
-					SubgraphMaxY += VSpacing;
+					SubgraphMaxY += EstimateNodeHeight(DataNode) + VSpacing;
 					PlacedDataNodes.Add(DataNode);
 				}
 			}
@@ -1443,7 +1453,7 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 				{
 					DataNode->NodePosX = Consumer->NodePosX - (HSpacing / 2);
 					DataNode->NodePosY = GlobalYOffset;
-					GlobalYOffset += VSpacing;
+					GlobalYOffset += EstimateNodeHeight(DataNode) + VSpacing;
 					bPlaced = true;
 					break;
 				}
@@ -1455,7 +1465,7 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 		{
 			DataNode->NodePosX = 0;
 			DataNode->NodePosY = GlobalYOffset;
-			GlobalYOffset += VSpacing;
+			GlobalYOffset += EstimateNodeHeight(DataNode) + VSpacing;
 		}
 		PlacedDataNodes.Add(DataNode);
 	}
