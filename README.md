@@ -1,15 +1,15 @@
 # UnrealMCP
 
-AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants like Claude create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, manage levels/maps, and run Play-in-Editor sessions — all through natural language.
+AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, manage levels/maps, run Play-in-Editor sessions, and auto-layout Blueprint graphs — all through natural language.
 
-**53 tools** across 10 categories. Fully tested against a live UE5.6 editor.
+**57 tools** across 11 categories, **44 Blueprint node types**, and **52 C++ command handlers**. Built for UE 5.6+.
 
 ## Architecture
 
 ```
-Claude Code ──stdio──> Python MCP Server ──TCP:55555──> C++ UE5 Editor Plugin
-                       (53 tools)                       (51 command handlers)
-                       mcp-server/                      plugin/UnrealMCP/
+AI Client ──stdio──> Python MCP Server ──TCP:55555──> C++ UE5 Editor Plugin
+                     (57 tools)                       (52 command handlers)
+                     mcp-server/                      plugin/UnrealMCP/
 ```
 
 - **Python MCP Server** — Implements the MCP protocol over stdio. Translates tool calls into TCP commands.
@@ -51,7 +51,7 @@ Add to your `.claude.json` (or use `claude mcp add`):
 }
 ```
 
-## Tools (53 total)
+## Tools (57 total)
 
 ### Blueprint Tools (9)
 
@@ -60,18 +60,18 @@ Add to your `.claude.json` (or use `claude mcp add`):
 | `create_blueprint` | Create a new Blueprint class | `name`, `parent_class` (Actor, Pawn, Character, GameModeBase, PlayerController, ActorComponent, SceneComponent), `path` |
 | `list_blueprints` | List all Blueprint assets in a directory | `path`, `recursive` |
 | `get_blueprint_info` | Get full Blueprint structure | `asset_path` → returns variables, functions, components, event graphs, parent class |
-| `compile_blueprint` | Compile with detailed error diagnostics | `asset_path` → returns status, error_count, warning_count, errors[] and warnings[] with per-node details (node_id, graph, message, severity, position) |
+| `compile_blueprint` | Compile with detailed error diagnostics | `asset_path` → returns status, error_count, warning_count, errors[] and warnings[] with per-node details |
 | `delete_blueprint` | Delete a Blueprint asset | `asset_path` |
 | `add_blueprint_variable` | Add a typed member variable | `asset_path`, `variable_name`, `variable_type` (Boolean, Byte, Integer, Integer64, Float, Double, String, Text, Name, Vector, Rotator, Transform, Object, Class), `default_value`, `category`, `is_instance_editable` |
 | `remove_blueprint_variable` | Remove a member variable | `asset_path`, `variable_name` |
 | `add_blueprint_component` | Add a component to the hierarchy | `asset_path`, `component_class` (StaticMeshComponent, BoxCollisionComponent, PointLightComponent, etc.), `component_name`, `parent_component`, `location`, `rotation`, `scale` |
 | `set_blueprint_component_defaults` | Set a default property on a BP component template (CDO) | `asset_path`, `component_name`, `property_name` (StaticMesh, CollisionProfileName, etc.), `property_value` (UE text format) |
 
-### Node Graph Tools (8)
+### Node Graph Tools (9)
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `add_node` | Add a node to a Blueprint graph | `asset_path`, `node_type` (43 types — see below), `function_name`, `target_class`, `node_position`, `params` |
+| `add_node` | Add a node to a Blueprint graph | `asset_path`, `node_type` (44 types — see below), `function_name`, `target_class`, `node_position`, `params` |
 | `get_graph_nodes` | Get all nodes with pins and connections | `asset_path`, `graph_name` → returns node IDs, classes, positions, pin details, connection map |
 | `connect_pins` | Connect an output pin to an input pin | `asset_path`, `source_node_id`, `source_pin_name`, `target_node_id`, `target_pin_name` |
 | `disconnect_pins` | Break all connections from a pin | `asset_path`, `node_id`, `pin_name` |
@@ -79,8 +79,9 @@ Add to your `.claude.json` (or use `claude mcp add`):
 | `set_pin_value` | Set a pin's default value | `asset_path`, `node_id`, `pin_name`, `value` (string, parsed by pin type) |
 | `create_function` | Create a new function graph | `asset_path`, `function_name`, `inputs` [{name, type}], `outputs` [{name, type}] |
 | `delete_function` | Delete a function from a Blueprint | `asset_path`, `function_name` |
+| `arrange_graph` | Auto-layout all nodes using a layered graph algorithm | `asset_path`, `graph_name`, `horizontal_spacing`, `vertical_spacing`, `subgraph_spacing` |
 
-**`add_node` supports 43 node types:**
+**`add_node` supports 44 node types:**
 
 | Category | node_type | Description | Required params |
 |----------|-----------|-------------|-----------------|
@@ -88,6 +89,7 @@ Add to your `.claude.json` (or use `claude mcp add`):
 | | `CommutativeAssociativeBinaryOperator` | Expandable math (Add, Multiply...) | `function_name`, `target_class` |
 | **Events** | `Event` | Built-in event | params: `event_name` |
 | | `CustomEvent` | Custom event | params: `event_name` |
+| | `EnhancedInputAction` | Enhanced Input event | params: `input_action_path` |
 | | `Self` | Self reference | — |
 | **Variables** | `VariableGet` | Get variable | params: `variable_name` |
 | | `VariableSet` | Set variable | params: `variable_name` |
@@ -145,6 +147,7 @@ Timeline        → node_type="Timeline", params={"timeline_name": "DoorTimeline
 Bind Event      → node_type="AddDelegate", params={"delegate_name": "OnDamageReceived"}
 Get Variable    → node_type="VariableGet", params={"variable_name": "Health"}
 Custom Event    → node_type="CustomEvent", params={"event_name": "OnDamageReceived"}
+Input Action    → node_type="EnhancedInputAction", params={"input_action_path": "/Game/Input/IA_Jump"}
 Format Text     → node_type="FormatText"
 Reroute         → node_type="Knot"
 ```
@@ -225,15 +228,23 @@ Reroute         → node_type="Knot"
 | `get_pie_status` | Get PIE state | (none) → returns `is_running`, `is_paused`, `is_simulating`, `world_name`, `player_count` |
 | `set_pie_paused` | Pause or resume the PIE session | `paused` (bool) |
 
+### Batch Tools (3)
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `batch_add_nodes` | Add multiple nodes in one call | `asset_path`, `nodes` (list of node definitions), `graph_name`, `stop_on_error` → returns `node_ids` list for wiring |
+| `batch_pin_operations` | Connect pins and set values in one call | `asset_path`, `connections` [{source_node_id, source_pin, target_node_id, target_pin}], `pin_values` [{node_id, pin_name, value}] |
+| `batch_spawn_actors` | Spawn multiple actors in one call | `actors` [{actor_class, name, location, rotation, scale, blueprint_path}], `stop_on_error` |
+
 ## What Can You Build With This?
 
-- **AI-assisted game prototyping** — Describe game mechanics in natural language, let Claude create Blueprints with the right nodes and connections
-- **Automated Blueprint construction** — Programmatically build complex node graphs (health systems, inventory, AI behavior)
+- **AI-assisted game prototyping** — Describe game mechanics in natural language, let the AI create Blueprints with the right nodes and connections
+- **Automated Blueprint construction** — Programmatically build complex node graphs (health systems, inventory, AI behavior) and auto-layout them
 - **Level design assistance** — Create/load/save maps, manage streaming sub-levels, spawn actors, set transforms, assign materials
 - **Asset management** — Import meshes/textures/sounds from disk, search the Content Browser, inspect asset metadata, rename and organize assets
 - **Runtime testing** — Start Play-in-Editor sessions, pause/resume gameplay, read runtime logs to verify behavior, debug at runtime
 - **Debugging** — Read console logs, inspect properties, take screenshots to understand editor state
-- **Batch operations** — Spawn dozens of actors or modify properties across many objects in a single command
+- **Batch operations** — Spawn dozens of actors, add many nodes, or wire up entire graphs in single tool calls
 
 ## Technical Details
 
@@ -266,11 +277,11 @@ This plugin integrates with UE 5.6's built-in MCP subsystem (`EpicUnrealMCPModul
 UnrealMCP/
   mcp-server/                  # Python MCP server
     src/unreal_mcp/
-      server.py                # Entry point, FastMCP setup (53 tools)
+      server.py                # Entry point, FastMCP setup
       connection.py            # TCP client (4-byte prefix protocol)
       tools/                   # Tool definitions by category
         blueprint.py           #   9 Blueprint tools
-        node_graph.py          #   8 Node Graph tools
+        node_graph.py          #   9 Node Graph tools
         actor.py               #   6 Actor tools
         property.py            #   5 Property tools
         material.py            #   4 Material tools
@@ -279,26 +290,14 @@ UnrealMCP/
         level.py               #   7 Level tools
         asset.py               #   5 Asset tools
         pie.py                 #   4 PIE tools
+        batch.py               #   3 Batch tools
   plugin/UnrealMCP/            # C++ UE5 editor plugin
     Source/UnrealMCP/
       Private/
         MCPTCPServer.cpp       # TCP listener, command dispatch, batch_execute
-        Commands/              # 51 command handlers by category
-          MCPBlueprintCommands.cpp
-          MCPNodeGraphCommands.cpp
-          MCPActorCommands.cpp
-          MCPPropertyCommands.cpp
-          MCPMaterialCommands.cpp
-          MCPViewportCommands.cpp
-          MCPConsoleCommands.cpp
-          MCPLevelCommands.cpp
-          MCPAssetCommands.cpp
-          MCPPIECommands.cpp
+        Commands/              # 52 command handlers by category
       Public/
         Commands/              # Header files
-  screenshots/                 # Saved viewport captures
-  DESIGN.md                    # Detailed architecture document
-  progression.md               # Progress tracker
 ```
 
 ## License

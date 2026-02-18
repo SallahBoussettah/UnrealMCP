@@ -1178,3 +1178,308 @@ TSharedPtr<FJsonObject> FMCPDeleteFunctionCommand::Execute(const TSharedPtr<FJso
 
 	return SuccessResponse(FString::Printf(TEXT("Deleted function: %s"), *FunctionName));
 }
+
+// --- Arrange Nodes (auto-layout) ---
+
+// Helper: check if a node has any exec pins (input or output)
+static bool NodeHasExecPins(UEdGraphNode* Node)
+{
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+			return true;
+	}
+	return false;
+}
+
+// Helper: get all exec output pins for a node
+static TArray<UEdGraphPin*> GetExecOutputPins(UEdGraphNode* Node)
+{
+	TArray<UEdGraphPin*> Result;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec && Pin->Direction == EGPD_Output)
+			Result.Add(Pin);
+	}
+	return Result;
+}
+
+// Helper: get all exec input pins for a node
+static TArray<UEdGraphPin*> GetExecInputPins(UEdGraphNode* Node)
+{
+	TArray<UEdGraphPin*> Result;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec && Pin->Direction == EGPD_Input)
+			Result.Add(Pin);
+	}
+	return Result;
+}
+
+// Helper: check if an exec input pin has any incoming connections
+static bool HasExecInputConnections(UEdGraphNode* Node)
+{
+	for (UEdGraphPin* Pin : GetExecInputPins(Node))
+	{
+		if (Pin->LinkedTo.Num() > 0)
+			return true;
+	}
+	return false;
+}
+
+TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+
+	int32 HSpacing = 350;
+	int32 VSpacing = 200;
+	int32 SubgraphSpacing = 400;
+
+	double TempVal;
+	if (Params->TryGetNumberField(TEXT("horizontal_spacing"), TempVal)) HSpacing = static_cast<int32>(TempVal);
+	if (Params->TryGetNumberField(TEXT("vertical_spacing"), TempVal)) VSpacing = static_cast<int32>(TempVal);
+	if (Params->TryGetNumberField(TEXT("subgraph_spacing"), TempVal)) SubgraphSpacing = static_cast<int32>(TempVal);
+
+	UBlueprint* BP = LoadBP(AssetPath);
+	if (!BP) return ErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	UEdGraph* Graph = FindGraph(BP, GraphName);
+	if (!Graph) return ErrorResponse(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	if (Graph->Nodes.Num() == 0) return SuccessResponse(TEXT("Graph has no nodes"));
+
+	FScopedTransaction Transaction(FText::FromString(TEXT("MCP Arrange Nodes")));
+
+	// Phase 0: Classify nodes as exec-flow or data-only
+	TArray<UEdGraphNode*> ExecNodes;
+	TArray<UEdGraphNode*> DataOnlyNodes;
+
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		if (NodeHasExecPins(Node))
+			ExecNodes.Add(Node);
+		else
+			DataOnlyNodes.Add(Node);
+	}
+
+	// Phase 1: Build adjacency via exec output pins (exec node → exec node)
+	// Maps each exec node to its exec successors
+	TMap<UEdGraphNode*, TArray<UEdGraphNode*>> ExecSuccessors;
+	TMap<UEdGraphNode*, TArray<UEdGraphNode*>> ExecPredecessors;
+	for (UEdGraphNode* Node : ExecNodes)
+	{
+		ExecSuccessors.FindOrAdd(Node);
+		ExecPredecessors.FindOrAdd(Node);
+	}
+
+	for (UEdGraphNode* Node : ExecNodes)
+	{
+		for (UEdGraphPin* OutPin : GetExecOutputPins(Node))
+		{
+			for (UEdGraphPin* LinkedPin : OutPin->LinkedTo)
+			{
+				UEdGraphNode* Successor = LinkedPin->GetOwningNode();
+				if (ExecSuccessors.Contains(Successor))
+				{
+					ExecSuccessors[Node].AddUnique(Successor);
+					ExecPredecessors[Successor].AddUnique(Node);
+				}
+			}
+		}
+	}
+
+	// Phase 2: Find root nodes (exec nodes with no exec input connections)
+	TArray<UEdGraphNode*> Roots;
+	for (UEdGraphNode* Node : ExecNodes)
+	{
+		if (!HasExecInputConnections(Node))
+			Roots.Add(Node);
+	}
+
+	// If no roots found (cycle), pick the first exec node as root
+	if (Roots.Num() == 0 && ExecNodes.Num() > 0)
+		Roots.Add(ExecNodes[0]);
+
+	// Phase 3: BFS from roots, assign layers using longest-path
+	TMap<UEdGraphNode*, int32> NodeLayer;
+	for (UEdGraphNode* Node : ExecNodes)
+		NodeLayer.Add(Node, -1);
+
+	// Process each root separately to identify subgraphs
+	TArray<TArray<UEdGraphNode*>> Subgraphs; // Each subgraph is a list of nodes in BFS order
+	TSet<UEdGraphNode*> Visited;
+
+	for (UEdGraphNode* Root : Roots)
+	{
+		if (Visited.Contains(Root)) continue;
+
+		TArray<UEdGraphNode*> SubgraphNodes;
+		TQueue<UEdGraphNode*> Queue;
+		Queue.Enqueue(Root);
+		Visited.Add(Root);
+		NodeLayer[Root] = 0;
+
+		while (!Queue.IsEmpty())
+		{
+			UEdGraphNode* Current;
+			Queue.Dequeue(Current);
+			SubgraphNodes.Add(Current);
+
+			int32 CurrentLayer = NodeLayer[Current];
+			for (UEdGraphNode* Successor : ExecSuccessors[Current])
+			{
+				// Longest-path: always try to push successor further right
+				int32 NewLayer = CurrentLayer + 1;
+				if (NewLayer > NodeLayer[Successor])
+				{
+					NodeLayer[Successor] = NewLayer;
+				}
+
+				if (!Visited.Contains(Successor))
+				{
+					Visited.Add(Successor);
+					Queue.Enqueue(Successor);
+				}
+			}
+		}
+
+		Subgraphs.Add(SubgraphNodes);
+	}
+
+	// Handle orphaned exec nodes (not reachable from any root)
+	for (UEdGraphNode* Node : ExecNodes)
+	{
+		if (!Visited.Contains(Node))
+		{
+			NodeLayer[Node] = 0;
+			TArray<UEdGraphNode*> OrphanSubgraph;
+			OrphanSubgraph.Add(Node);
+			Subgraphs.Add(OrphanSubgraph);
+			Visited.Add(Node);
+		}
+	}
+
+	// Phase 4: Group nodes by subgraph + layer
+	// Phase 5: Assign positions — layers = X columns, vertical stacking within layer
+	int32 GlobalYOffset = 0;
+
+	// Track which data-only nodes we place (to avoid placing them twice)
+	TSet<UEdGraphNode*> PlacedDataNodes;
+
+	for (int32 SubIdx = 0; SubIdx < Subgraphs.Num(); ++SubIdx)
+	{
+		const TArray<UEdGraphNode*>& SubgraphNodes = Subgraphs[SubIdx];
+
+		// Group by layer
+		TMap<int32, TArray<UEdGraphNode*>> LayerToNodes;
+		int32 MaxLayer = 0;
+		for (UEdGraphNode* Node : SubgraphNodes)
+		{
+			int32 Layer = NodeLayer[Node];
+			LayerToNodes.FindOrAdd(Layer).Add(Node);
+			if (Layer > MaxLayer) MaxLayer = Layer;
+		}
+
+		// Place exec nodes
+		int32 SubgraphMaxY = 0;
+		for (int32 Layer = 0; Layer <= MaxLayer; ++Layer)
+		{
+			TArray<UEdGraphNode*>* NodesInLayer = LayerToNodes.Find(Layer);
+			if (!NodesInLayer) continue;
+
+			for (int32 Idx = 0; Idx < NodesInLayer->Num(); ++Idx)
+			{
+				UEdGraphNode* Node = (*NodesInLayer)[Idx];
+				Node->NodePosX = Layer * HSpacing;
+				Node->NodePosY = GlobalYOffset + Idx * VSpacing;
+
+				int32 BottomY = Node->NodePosY + VSpacing;
+				if (BottomY > SubgraphMaxY) SubgraphMaxY = BottomY;
+			}
+		}
+
+		// Phase 6: Place data-only nodes near their consumers within this subgraph
+		for (UEdGraphNode* Node : SubgraphNodes)
+		{
+			for (UEdGraphPin* InputPin : Node->Pins)
+			{
+				if (InputPin->Direction != EGPD_Input) continue;
+				if (InputPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
+
+				for (UEdGraphPin* LinkedPin : InputPin->LinkedTo)
+				{
+					UEdGraphNode* DataNode = LinkedPin->GetOwningNode();
+					if (!DataNode) continue;
+					if (PlacedDataNodes.Contains(DataNode)) continue;
+					if (!DataOnlyNodes.Contains(DataNode)) continue;
+
+					// Place data node to the left and below its consumer
+					DataNode->NodePosX = Node->NodePosX - (HSpacing / 2);
+					DataNode->NodePosY = SubgraphMaxY;
+					SubgraphMaxY += VSpacing;
+					PlacedDataNodes.Add(DataNode);
+				}
+			}
+		}
+
+		GlobalYOffset = SubgraphMaxY + SubgraphSpacing;
+	}
+
+	// Place remaining data-only nodes that aren't connected to any exec node
+	for (UEdGraphNode* DataNode : DataOnlyNodes)
+	{
+		if (PlacedDataNodes.Contains(DataNode)) continue;
+
+		// Try to place near the first consumer of any kind
+		bool bPlaced = false;
+		for (UEdGraphPin* OutputPin : DataNode->Pins)
+		{
+			if (OutputPin->Direction != EGPD_Output) continue;
+			for (UEdGraphPin* LinkedPin : OutputPin->LinkedTo)
+			{
+				UEdGraphNode* Consumer = LinkedPin->GetOwningNode();
+				if (Consumer)
+				{
+					DataNode->NodePosX = Consumer->NodePosX - (HSpacing / 2);
+					DataNode->NodePosY = GlobalYOffset;
+					GlobalYOffset += VSpacing;
+					bPlaced = true;
+					break;
+				}
+			}
+			if (bPlaced) break;
+		}
+
+		if (!bPlaced)
+		{
+			DataNode->NodePosX = 0;
+			DataNode->NodePosY = GlobalYOffset;
+			GlobalYOffset += VSpacing;
+		}
+		PlacedDataNodes.Add(DataNode);
+	}
+
+	// Phase 7: Build result JSON with new positions
+	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetNumberField(TEXT("nodes_arranged"), Graph->Nodes.Num());
+	Data->SetNumberField(TEXT("exec_nodes"), ExecNodes.Num());
+	Data->SetNumberField(TEXT("data_nodes"), DataOnlyNodes.Num());
+	Data->SetNumberField(TEXT("subgraphs"), Subgraphs.Num());
+
+	TArray<TSharedPtr<FJsonValue>> Positions;
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		TSharedPtr<FJsonObject> PosObj = MakeShared<FJsonObject>();
+		PosObj->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString());
+		PosObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+		PosObj->SetNumberField(TEXT("pos_x"), Node->NodePosX);
+		PosObj->SetNumberField(TEXT("pos_y"), Node->NodePosY);
+		Positions.Add(MakeShared<FJsonValueObject>(PosObj));
+	}
+	Data->SetArrayField(TEXT("positions"), Positions);
+
+	return SuccessResponse(Data);
+}

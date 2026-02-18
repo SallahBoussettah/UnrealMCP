@@ -425,6 +425,7 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPSetPinValueCommand>());
 	Register(MakeShared<FMCPCreateFunctionCommand>());
 	Register(MakeShared<FMCPDeleteFunctionCommand>());
+	Register(MakeShared<FMCPArrangeNodesCommand>());
 
 	// Viewport commands
 	Register(MakeShared<FMCPTakeScreenshotCommand>());

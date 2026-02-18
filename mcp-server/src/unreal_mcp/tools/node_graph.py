@@ -312,3 +312,38 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
         if not result.get("success"):
             return f"Error: {result.get('error', 'Unknown error')}"
         return str(result.get("data", {}))
+
+    @mcp.tool()
+    async def arrange_graph(
+        asset_path: str,
+        graph_name: str = "EventGraph",
+        horizontal_spacing: int = 350,
+        vertical_spacing: int = 200,
+        subgraph_spacing: int = 400,
+    ) -> str:
+        """Auto-layout all nodes in a Blueprint graph using a layered graph algorithm.
+
+        Arranges exec-flow nodes left-to-right in layers (BFS from roots), then
+        places data-only nodes (VariableGet, Self, etc.) near their consumers.
+        Disconnected subgraphs are stacked vertically.
+
+        Args:
+            asset_path: Blueprint asset path (e.g. '/Game/Blueprints/BP_MyActor')
+            graph_name: Name of the graph to arrange (default: 'EventGraph')
+            horizontal_spacing: Pixels between layers/columns (default: 350)
+            vertical_spacing: Pixels between nodes in the same layer (default: 200)
+            subgraph_spacing: Pixels between disconnected subgraphs (default: 400)
+
+        Returns:
+            JSON with count of arranged nodes, subgraphs found, and new positions
+        """
+        result = await send_command("arrange_nodes", {
+            "asset_path": asset_path,
+            "graph_name": graph_name,
+            "horizontal_spacing": horizontal_spacing,
+            "vertical_spacing": vertical_spacing,
+            "subgraph_spacing": subgraph_spacing,
+        })
+        if not result.get("success"):
+            return f"Error: {result.get('error', 'Unknown error')}"
+        return str(result.get("data", {}))

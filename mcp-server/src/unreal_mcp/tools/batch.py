@@ -40,7 +40,7 @@ def register_batch_tools(mcp: FastMCP) -> None:
             ])
         """
         commands = []
-        for node in nodes:
+        for i, node in enumerate(nodes):
             commands.append({
                 "command": "add_node",
                 "params": {
@@ -49,7 +49,7 @@ def register_batch_tools(mcp: FastMCP) -> None:
                     "node_type": node.get("node_type", "CallFunction"),
                     "function_name": node.get("function_name", ""),
                     "target_class": node.get("target_class", ""),
-                    "node_position": node.get("node_position", [0, 0]),
+                    "node_position": node.get("node_position") or [i * 350, 0],
                     "params": node.get("params", {}),
                 },
             })

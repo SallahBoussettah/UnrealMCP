@@ -57,3 +57,10 @@ public:
 	virtual TSharedPtr<FJsonObject> Execute(const TSharedPtr<FJsonObject>& Params) override;
 	virtual FString GetCommandName() const override { return TEXT("delete_function"); }
 };
+
+class FMCPArrangeNodesCommand : public FMCPCommandBase
+{
+public:
+	virtual TSharedPtr<FJsonObject> Execute(const TSharedPtr<FJsonObject>& Params) override;
+	virtual FString GetCommandName() const override { return TEXT("arrange_nodes"); }
+};
