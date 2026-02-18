@@ -2,13 +2,13 @@
 
 ## Current State
 
-**69 MCP tools** | **64 C++ command handlers** | **44 Blueprint node types** | **13 categories**
+**75 MCP tools** | **70 C++ command handlers** | **44 Blueprint node types** | **14 categories**
 
 ### Completed Categories
 
 | Category | Tools | Status |
 |----------|-------|--------|
-| Blueprint | 9 | Done |
+| Blueprint | 10 | Done |
 | Node Graph | 9 | Done |
 | Actor | 6 | Done |
 | Property | 5 | Done |
@@ -20,33 +20,26 @@
 | PIE | 4 | Done |
 | Batch | 3 | Done |
 | Widget | 5 | Done |
-| Animation | 7 | Needs Test |
+| Animation | 7 | Done |
+| Debug | 5 | Done |
 
 ---
 
-## Known Issues (HIGH PRIORITY)
+## Known Issues (Remaining)
 
-Bugs and limitations discovered during real-world Blueprint building. These block common workflows.
-
-### Blueprint Interfaces
-- **Cannot create Blueprint Interfaces** — BPI assets must be created manually (Right-click > Blueprints > Blueprint Interface)
-- **Cannot add function parameters to existing functions** — e.g. Caller input on Interact had to be added manually
-- **Cannot implement Blueprint Interface on a class** — Adding BPI to Class Settings > Interfaces must be done manually
+### Still Open
 - **Cannot create Interface Message call nodes** — e.g. "Interact (Message)" targeting BPI_Interactable
 - **Cannot create Interface Event nodes** — e.g. Event Interact (from interface) must be added manually
-
-### Variable Type Issues
-- **Cannot create Object Reference variables** — e.g. `current_interactable` (Actor ref) had to be added manually
-- **Float variables created as Integer** — Variables specified as Float are created as int32. ToFloat conversion nodes auto-added as workaround
-- **Variable defaults may not apply** — bCanInteract defaulted to False instead of True, OpenAngle to 0 instead of 90, open_direction to 0 instead of 1
-
-### Missing Node Types
-- **Enhanced Input Action events** — EnhancedInputAction IA_Interact had to be added manually
 - **OnComponentBeginOverlap / OnComponentEndOverlap** delegate bindings had to be added manually
 
-### Component Properties
-- **GenerateOverlapEvents** — Verify setting sticks when set via `set_blueprint_component_defaults`
-- **CollisionProfileName** — Verify "OverlapAllDynamic" persists after compilation
+### Fixed (v0.8)
+- ~~Float variables created as Integer~~ — Fixed: uses PC_Real + PC_Float sub-category
+- ~~Variable defaults not applied~~ — Fixed: C++ now reads default_value, is_instance_editable, category
+- ~~Cannot create Object Reference variables~~ — Fixed: Object:ClassName, Class:ClassName, SoftObject:ClassName, Interface:ClassName
+- ~~Cannot create Blueprint Interfaces~~ — Fixed: `create_blueprint(blueprint_type="Interface")`
+- ~~Cannot implement Blueprint Interface~~ — Fixed: new `implement_interface` tool
+- ~~Cannot add function parameters~~ — Fixed: `create_function` now accepts inputs/outputs arrays
+- ~~Enhanced Input Action events~~ — Fixed in prior release (EnhancedInputAction node type)
 
 ---
 
@@ -63,27 +56,32 @@ Create and edit Widget Blueprints programmatically. Every game needs UI.
 - [x] `remove_widget` — Remove a widget from the hierarchy
 - [ ] `bind_widget_event` — Bind widget events to functions (deferred — requires event dispatcher wiring)
 
-### Priority 2 — Animation Blueprints & State Machines (Needs Test)
-
-AnimBPs are among the most tedious things to set up manually. Fixes applied for entry node auto-connection and bool_variable auto-creation — awaiting retest.
+### Priority 2 — Animation Blueprints & State Machines ✓
 
 - [x] `create_anim_blueprint` — Create an Animation Blueprint for a given Skeleton (with default state machine)
 - [x] `add_anim_state` — Add a state to an AnimGraph state machine (with optional animation asset)
 - [x] `add_anim_transition` — Add a transition between states (with crossfade duration and blend mode)
-- [~] `set_anim_transition_rule` — Set the transition condition (auto_rule, time_remaining, bool_variable) — **bool_variable fix untested**
+- [x] `set_anim_transition_rule` — Set the transition condition (auto_rule, time_remaining, bool_variable)
 - [x] `add_blend_space` — Create a BlendSpace1D or BlendSpace2D asset (with axis config and samples)
 - [x] `add_anim_montage` — Create an AnimMontage from an animation sequence (with slot and sections)
 - [x] `get_anim_graph` — Get the full state machine structure (states, transitions, conditions)
 
-### Priority 3 — Blueprint Debugging
+### Priority 3 — Blueprint Debugging ✓
 
-Make the AI a real debugging partner during PIE sessions.
+- [x] `set_breakpoint` — Set/remove a breakpoint on a Blueprint node
+- [x] `get_breakpoints` — List all breakpoints in a Blueprint
+- [x] `get_watch_values` — Read watched variable values during a paused PIE session
+- [x] `step_execution` — Step into/over/out during Blueprint debugging
+- [x] `get_call_stack` — Get the Blueprint execution call stack when paused at a breakpoint
 
-- [ ] `set_breakpoint` — Set/remove a breakpoint on a Blueprint node
-- [ ] `get_breakpoints` — List all breakpoints in a Blueprint
-- [ ] `get_watch_values` — Read watched variable values during a paused PIE session
-- [ ] `step_execution` — Step into/over/out during Blueprint debugging
-- [ ] `get_call_stack` — Get the Blueprint execution call stack when paused at a breakpoint
+### High Priority Bug Fixes (v0.8) ✓
+
+- [x] Float variables: `PC_Real` + `PC_Float` sub-category (was bare `PC_Float` → Integer)
+- [x] Variable defaults: C++ now reads `default_value`, `is_instance_editable`, `category`
+- [x] Object/Class/SoftObject/Interface reference variable types
+- [x] Function parameters: `create_function` inputs/outputs via `FUserPinInfo`
+- [x] Blueprint Interface creation: `blueprint_type="Interface"` on `create_blueprint`
+- [x] `implement_interface` — New tool to add interface to a Blueprint
 
 ### Priority 4 — Data Table Editing
 

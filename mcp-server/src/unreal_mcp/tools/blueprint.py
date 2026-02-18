@@ -13,6 +13,7 @@ def register_blueprint_tools(mcp: FastMCP) -> None:
         name: str,
         parent_class: str = "Actor",
         path: str = "/Game/Blueprints",
+        blueprint_type: str = "Normal",
     ) -> str:
         """Create a new Blueprint class in the Unreal Engine project.
 
@@ -27,7 +28,11 @@ def register_blueprint_tools(mcp: FastMCP) -> None:
                 - 'ActorComponent'
                 - 'SceneComponent'
                 - Or any custom class name
+                Ignored when blueprint_type='Interface'.
             path: Content folder path (e.g., '/Game/Blueprints')
+            blueprint_type: Type of Blueprint to create:
+                - 'Normal' (default) — standard Blueprint class
+                - 'Interface' — Blueprint Interface (for implementing in other BPs)
 
         Returns:
             JSON with the created Blueprint's asset path and details
@@ -36,6 +41,7 @@ def register_blueprint_tools(mcp: FastMCP) -> None:
             "name": name,
             "parent_class": parent_class,
             "path": path,
+            "blueprint_type": blueprint_type,
         })
         if not result.get("success"):
             return f"Error: {result.get('error', 'Unknown error')}"
@@ -135,11 +141,14 @@ def register_blueprint_tools(mcp: FastMCP) -> None:
             asset_path: Blueprint asset path
             variable_name: Name for the new variable
             variable_type: Type of the variable. Supported types:
-                - 'Boolean', 'Byte', 'Integer', 'Integer64', 'Float', 'Double'
-                - 'String', 'Text', 'Name'
-                - 'Vector', 'Rotator', 'Transform'
-                - 'Object' (requires specifying a class)
-                - 'Class'
+                - Primitives: 'Boolean', 'Byte', 'Integer', 'Integer64', 'Float', 'Double'
+                - Text: 'String', 'Text', 'Name'
+                - Structs: 'Vector', 'Rotator', 'Transform'
+                - Object refs: 'Object' (UObject), 'Object:Actor', 'Object:StaticMeshComponent', etc.
+                - Class refs: 'Class' (UObject), 'Class:Actor', etc.
+                - Soft refs: 'SoftObject', 'SoftObject:Texture2D', etc.
+                - Interface refs: 'Interface', 'Interface:MyInterface'
+                Use 'Type:ClassName' syntax for typed references.
             default_value: Default value as string (optional)
             is_instance_editable: Whether the variable is editable per-instance in the details panel
             category: Category to organize the variable under in the details panel
@@ -254,6 +263,33 @@ def register_blueprint_tools(mcp: FastMCP) -> None:
             "component_name": component_name,
             "property_name": property_name,
             "property_value": property_value,
+        })
+        if not result.get("success"):
+            return f"Error: {result.get('error', 'Unknown error')}"
+        return str(result.get("data", {}))
+
+    @mcp.tool()
+    async def implement_interface(
+        asset_path: str,
+        interface_path: str,
+    ) -> str:
+        """Add a Blueprint Interface implementation to a Blueprint.
+
+        The Blueprint will gain all the interface's function stubs, which can then
+        be implemented using create_function or by adding nodes to the generated
+        event graphs.
+
+        Args:
+            asset_path: Blueprint asset path (e.g., '/Game/Blueprints/BP_MyActor.BP_MyActor')
+            interface_path: Path to the Blueprint Interface asset
+                (e.g., '/Game/Blueprints/BPI_Damageable.BPI_Damageable')
+
+        Returns:
+            JSON with the blueprint name, interface name, and interface class path
+        """
+        result = await send_command("implement_interface", {
+            "asset_path": asset_path,
+            "interface_path": interface_path,
         })
         if not result.get("success"):
             return f"Error: {result.get('error', 'Unknown error')}"

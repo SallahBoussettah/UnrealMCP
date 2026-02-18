@@ -62,16 +62,29 @@ TSharedPtr<FJsonObject> FMCPCreateBlueprintCommand::Execute(const TSharedPtr<FJs
 	FString Name = Params->GetStringField(TEXT("name"));
 	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
 	FString Path = Params->GetStringField(TEXT("path"));
+	FString BlueprintType = Params->GetStringField(TEXT("blueprint_type"));
 
 	if (Name.IsEmpty())
 	{
 		return ErrorResponse(TEXT("Blueprint name is required"));
 	}
 
-	UClass* ParentClass = FindClassByName(ParentClassName);
-	if (!ParentClass)
+	// Determine Blueprint type
+	EBlueprintType BPType = BPTYPE_Normal;
+	UClass* ParentClass = nullptr;
+
+	if (BlueprintType == TEXT("Interface"))
 	{
-		return ErrorResponse(FString::Printf(TEXT("Parent class '%s' not found"), *ParentClassName));
+		BPType = BPTYPE_Interface;
+		ParentClass = UInterface::StaticClass();
+	}
+	else
+	{
+		ParentClass = FindClassByName(ParentClassName);
+		if (!ParentClass)
+		{
+			return ErrorResponse(FString::Printf(TEXT("Parent class '%s' not found"), *ParentClassName));
+		}
 	}
 
 	FString PackagePath = Path / Name;
@@ -85,7 +98,7 @@ TSharedPtr<FJsonObject> FMCPCreateBlueprintCommand::Execute(const TSharedPtr<FJs
 		ParentClass,
 		Package,
 		*Name,
-		BPTYPE_Normal,
+		BPType,
 		UBlueprint::StaticClass(),
 		UBlueprintGeneratedClass::StaticClass()
 	);
@@ -108,6 +121,7 @@ TSharedPtr<FJsonObject> FMCPCreateBlueprintCommand::Execute(const TSharedPtr<FJs
 	Data->SetStringField(TEXT("name"), Name);
 	Data->SetStringField(TEXT("asset_path"), NewBP->GetPathName());
 	Data->SetStringField(TEXT("parent_class"), ParentClass->GetName());
+	Data->SetStringField(TEXT("blueprint_type"), BPType == BPTYPE_Interface ? TEXT("Interface") : TEXT("Normal"));
 	return SuccessResponse(Data);
 }
 
@@ -318,8 +332,16 @@ TSharedPtr<FJsonObject> FMCPAddBlueprintVariableCommand::Execute(const TSharedPt
 	else if (VarType == TEXT("Byte")) PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
 	else if (VarType == TEXT("Integer")) PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
 	else if (VarType == TEXT("Integer64")) PinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
-	else if (VarType == TEXT("Float")) PinType.PinCategory = UEdGraphSchema_K2::PC_Float;
-	else if (VarType == TEXT("Double")) PinType.PinCategory = UEdGraphSchema_K2::PC_Double;
+	else if (VarType == TEXT("Float"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+		PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+	}
+	else if (VarType == TEXT("Double"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+		PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
+	}
 	else if (VarType == TEXT("String")) PinType.PinCategory = UEdGraphSchema_K2::PC_String;
 	else if (VarType == TEXT("Text")) PinType.PinCategory = UEdGraphSchema_K2::PC_Text;
 	else if (VarType == TEXT("Name")) PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
@@ -338,9 +360,71 @@ TSharedPtr<FJsonObject> FMCPAddBlueprintVariableCommand::Execute(const TSharedPt
 		PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
 		PinType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
 	}
+	else if (VarType == TEXT("Object") || VarType.StartsWith(TEXT("Object:")))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
+		if (VarType.Contains(TEXT(":")))
+		{
+			FString ClassName = VarType.RightChop(VarType.Find(TEXT(":")) + 1);
+			UClass* ObjClass = FindClassByName(ClassName);
+			if (ObjClass)
+				PinType.PinSubCategoryObject = ObjClass;
+			else
+				return ErrorResponse(FString::Printf(TEXT("Class not found for Object reference: %s"), *ClassName));
+		}
+		else
+		{
+			PinType.PinSubCategoryObject = UObject::StaticClass();
+		}
+	}
+	else if (VarType == TEXT("Class") || VarType.StartsWith(TEXT("Class:")))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Class;
+		if (VarType.Contains(TEXT(":")))
+		{
+			FString ClassName = VarType.RightChop(VarType.Find(TEXT(":")) + 1);
+			UClass* ObjClass = FindClassByName(ClassName);
+			if (ObjClass)
+				PinType.PinSubCategoryObject = ObjClass;
+			else
+				return ErrorResponse(FString::Printf(TEXT("Class not found for Class reference: %s"), *ClassName));
+		}
+		else
+		{
+			PinType.PinSubCategoryObject = UObject::StaticClass();
+		}
+	}
+	else if (VarType == TEXT("SoftObject") || VarType.StartsWith(TEXT("SoftObject:")))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+		if (VarType.Contains(TEXT(":")))
+		{
+			FString ClassName = VarType.RightChop(VarType.Find(TEXT(":")) + 1);
+			UClass* ObjClass = FindClassByName(ClassName);
+			if (ObjClass)
+				PinType.PinSubCategoryObject = ObjClass;
+			else
+				return ErrorResponse(FString::Printf(TEXT("Class not found for SoftObject reference: %s"), *ClassName));
+		}
+		else
+		{
+			PinType.PinSubCategoryObject = UObject::StaticClass();
+		}
+	}
+	else if (VarType == TEXT("Interface") || VarType.StartsWith(TEXT("Interface:")))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Interface;
+		if (VarType.Contains(TEXT(":")))
+		{
+			FString ClassName = VarType.RightChop(VarType.Find(TEXT(":")) + 1);
+			UClass* ObjClass = FindClassByName(ClassName);
+			if (ObjClass)
+				PinType.PinSubCategoryObject = ObjClass;
+		}
+	}
 	else
 	{
-		return ErrorResponse(FString::Printf(TEXT("Unsupported variable type: %s"), *VarType));
+		return ErrorResponse(FString::Printf(TEXT("Unsupported variable type: %s. Supported: Boolean, Byte, Integer, Integer64, Float, Double, String, Text, Name, Vector, Rotator, Transform, Object, Object:<ClassName>, Class, Class:<ClassName>, SoftObject, SoftObject:<ClassName>, Interface, Interface:<ClassName>"), *VarType));
 	}
 
 	bool bSuccess = FBlueprintEditorUtils::AddMemberVariable(BP, FName(*VarName), PinType);
@@ -349,11 +433,39 @@ TSharedPtr<FJsonObject> FMCPAddBlueprintVariableCommand::Execute(const TSharedPt
 		return ErrorResponse(FString::Printf(TEXT("Failed to add variable '%s'"), *VarName));
 	}
 
+	// Apply default value if provided
+	FString DefaultValue = Params->GetStringField(TEXT("default_value"));
+	if (!DefaultValue.IsEmpty())
+	{
+		int32 VarIndex = FBlueprintEditorUtils::FindNewVariableIndex(BP, FName(*VarName));
+		if (VarIndex != INDEX_NONE)
+		{
+			BP->NewVariables[VarIndex].DefaultValue = DefaultValue;
+		}
+	}
+
+	// Apply instance editable setting
+	bool bInstanceEditable = true;
+	Params->TryGetBoolField(TEXT("is_instance_editable"), bInstanceEditable);
+	FBlueprintEditorUtils::SetBlueprintVariableMetaData(BP, FName(*VarName), nullptr,
+		FBlueprintMetadata::MD_Private, bInstanceEditable ? TEXT("false") : TEXT("true"));
+
+	// Apply category if provided
+	FString Category;
+	if (Params->TryGetStringField(TEXT("category"), Category) && !Category.IsEmpty())
+	{
+		FBlueprintEditorUtils::SetBlueprintVariableCategory(BP, FName(*VarName), nullptr, FText::FromString(Category));
+	}
+
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("variable_name"), VarName);
 	Data->SetStringField(TEXT("variable_type"), VarType);
+	if (!DefaultValue.IsEmpty())
+	{
+		Data->SetStringField(TEXT("default_value"), DefaultValue);
+	}
 	return SuccessResponse(Data);
 }
 
@@ -588,5 +700,59 @@ TSharedPtr<FJsonObject> FMCPSetBlueprintComponentDefaultsCommand::Execute(const 
 	Data->SetStringField(TEXT("property_name"), PropertyName);
 	Data->SetStringField(TEXT("property_value"), PropertyValue);
 	Data->SetStringField(TEXT("component_class"), ComponentTemplate->GetClass()->GetName());
+	return SuccessResponse(Data);
+}
+
+// --- Implement Interface ---
+TSharedPtr<FJsonObject> FMCPImplementInterfaceCommand::Execute(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString InterfacePath = Params->GetStringField(TEXT("interface_path"));
+
+	if (InterfacePath.IsEmpty())
+	{
+		return ErrorResponse(TEXT("interface_path is required"));
+	}
+
+	UBlueprint* BP = LoadBlueprintFromPath(AssetPath);
+	if (!BP)
+	{
+		return ErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	// Load the interface Blueprint
+	UBlueprint* InterfaceBP = LoadBlueprintFromPath(InterfacePath);
+	if (!InterfaceBP)
+	{
+		return ErrorResponse(FString::Printf(TEXT("Interface Blueprint not found: %s"), *InterfacePath));
+	}
+
+	if (InterfaceBP->BlueprintType != BPTYPE_Interface)
+	{
+		return ErrorResponse(FString::Printf(TEXT("'%s' is not a Blueprint Interface"), *InterfacePath));
+	}
+
+	if (!InterfaceBP->GeneratedClass)
+	{
+		return ErrorResponse(FString::Printf(TEXT("Interface '%s' has no generated class (compile it first)"), *InterfacePath));
+	}
+
+	// Check if interface is already implemented
+	for (const FBPInterfaceDescription& Existing : BP->ImplementedInterfaces)
+	{
+		if (Existing.Interface == InterfaceBP->GeneratedClass)
+		{
+			return ErrorResponse(FString::Printf(TEXT("Interface '%s' is already implemented"), *InterfacePath));
+		}
+	}
+
+	FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("MCP: Implement Interface %s"), *InterfaceBP->GetName())));
+	FBlueprintEditorUtils::ImplementNewInterface(BP, InterfaceBP->GeneratedClass->GetClassPathName());
+	FKismetEditorUtilities::CompileBlueprint(BP);
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("blueprint"), BP->GetName());
+	Data->SetStringField(TEXT("interface"), InterfaceBP->GetName());
+	Data->SetStringField(TEXT("interface_class"), InterfaceBP->GeneratedClass->GetPathName());
 	return SuccessResponse(Data);
 }

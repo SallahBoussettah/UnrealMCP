@@ -1119,6 +1119,80 @@ TSharedPtr<FJsonObject> FMCPSetPinValueCommand::Execute(const TSharedPtr<FJsonOb
 	return SuccessResponse(FString::Printf(TEXT("Set pin '%s' = '%s'"), *PinName, *Value));
 }
 
+// Helper: Convert a type string to FEdGraphPinType (shared mapping for function params and variables)
+static FEdGraphPinType StringToPinType(const FString& TypeStr)
+{
+	FEdGraphPinType PinType;
+
+	if (TypeStr == TEXT("Boolean")) PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+	else if (TypeStr == TEXT("Byte")) PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+	else if (TypeStr == TEXT("Integer")) PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
+	else if (TypeStr == TEXT("Integer64")) PinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
+	else if (TypeStr == TEXT("Float"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+		PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+	}
+	else if (TypeStr == TEXT("Double"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+		PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
+	}
+	else if (TypeStr == TEXT("String")) PinType.PinCategory = UEdGraphSchema_K2::PC_String;
+	else if (TypeStr == TEXT("Text")) PinType.PinCategory = UEdGraphSchema_K2::PC_Text;
+	else if (TypeStr == TEXT("Name")) PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
+	else if (TypeStr == TEXT("Vector"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		PinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
+	}
+	else if (TypeStr == TEXT("Rotator"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		PinType.PinSubCategoryObject = TBaseStructure<FRotator>::Get();
+	}
+	else if (TypeStr == TEXT("Transform"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		PinType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
+	}
+	else if (TypeStr == TEXT("Object") || TypeStr.StartsWith(TEXT("Object:")))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
+		if (TypeStr.Contains(TEXT(":")))
+		{
+			FString ClassName = TypeStr.RightChop(TypeStr.Find(TEXT(":")) + 1);
+			UClass* ObjClass = FindClassByName(ClassName);
+			if (ObjClass) PinType.PinSubCategoryObject = ObjClass;
+		}
+		else
+		{
+			PinType.PinSubCategoryObject = UObject::StaticClass();
+		}
+	}
+	else if (TypeStr == TEXT("Class") || TypeStr.StartsWith(TEXT("Class:")))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Class;
+		if (TypeStr.Contains(TEXT(":")))
+		{
+			FString ClassName = TypeStr.RightChop(TypeStr.Find(TEXT(":")) + 1);
+			UClass* ObjClass = FindClassByName(ClassName);
+			if (ObjClass) PinType.PinSubCategoryObject = ObjClass;
+		}
+		else
+		{
+			PinType.PinSubCategoryObject = UObject::StaticClass();
+		}
+	}
+	else
+	{
+		// Default fallback to wildcard — caller should validate
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
+	}
+
+	return PinType;
+}
+
 // --- Create Function ---
 TSharedPtr<FJsonObject> FMCPCreateFunctionCommand::Execute(const TSharedPtr<FJsonObject>& Params)
 {
@@ -1138,6 +1212,79 @@ TSharedPtr<FJsonObject> FMCPCreateFunctionCommand::Execute(const TSharedPtr<FJso
 	);
 
 	FBlueprintEditorUtils::AddFunctionGraph<UClass>(BP, FuncGraph, true, nullptr);
+
+	// Process input parameters
+	const TArray<TSharedPtr<FJsonValue>>* InputsArr;
+	if (Params->TryGetArrayField(TEXT("inputs"), InputsArr) && InputsArr->Num() > 0)
+	{
+		UK2Node_FunctionEntry* EntryNode = nullptr;
+		for (UEdGraphNode* Node : FuncGraph->Nodes)
+		{
+			EntryNode = Cast<UK2Node_FunctionEntry>(Node);
+			if (EntryNode) break;
+		}
+		if (EntryNode)
+		{
+			for (const auto& InputVal : *InputsArr)
+			{
+				auto InputObj = InputVal->AsObject();
+				if (!InputObj.IsValid()) continue;
+				FString ParamName = InputObj->GetStringField(TEXT("name"));
+				FString ParamType = InputObj->GetStringField(TEXT("type"));
+				if (ParamName.IsEmpty() || ParamType.IsEmpty()) continue;
+
+				FEdGraphPinType ParamPinType = StringToPinType(ParamType);
+
+				TSharedPtr<FUserPinInfo> PinInfo = MakeShared<FUserPinInfo>();
+				PinInfo->PinName = FName(*ParamName);
+				PinInfo->PinType = ParamPinType;
+				PinInfo->DesiredPinDirection = EGPD_Output; // Entry outputs = function inputs
+				EntryNode->UserDefinedPins.Add(PinInfo);
+			}
+			EntryNode->ReconstructNode();
+		}
+	}
+
+	// Process output parameters
+	const TArray<TSharedPtr<FJsonValue>>* OutputsArr;
+	if (Params->TryGetArrayField(TEXT("outputs"), OutputsArr) && OutputsArr->Num() > 0)
+	{
+		// Find or create result node
+		UK2Node_FunctionResult* ResultNode = nullptr;
+		for (UEdGraphNode* Node : FuncGraph->Nodes)
+		{
+			ResultNode = Cast<UK2Node_FunctionResult>(Node);
+			if (ResultNode) break;
+		}
+		if (!ResultNode)
+		{
+			// Create a result node if one doesn't exist
+			ResultNode = NewObject<UK2Node_FunctionResult>(FuncGraph);
+			ResultNode->NodePosX = 600;
+			ResultNode->NodePosY = 0;
+			FuncGraph->AddNode(ResultNode, false, false);
+			ResultNode->AllocateDefaultPins();
+		}
+
+		for (const auto& OutputVal : *OutputsArr)
+		{
+			auto OutputObj = OutputVal->AsObject();
+			if (!OutputObj.IsValid()) continue;
+			FString ParamName = OutputObj->GetStringField(TEXT("name"));
+			FString ParamType = OutputObj->GetStringField(TEXT("type"));
+			if (ParamName.IsEmpty() || ParamType.IsEmpty()) continue;
+
+			FEdGraphPinType ParamPinType = StringToPinType(ParamType);
+
+			TSharedPtr<FUserPinInfo> PinInfo = MakeShared<FUserPinInfo>();
+			PinInfo->PinName = FName(*ParamName);
+			PinInfo->PinType = ParamPinType;
+			PinInfo->DesiredPinDirection = EGPD_Input; // Result inputs = function outputs
+			ResultNode->UserDefinedPins.Add(PinInfo);
+		}
+		ResultNode->ReconstructNode();
+	}
+
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();

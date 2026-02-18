@@ -1,14 +1,14 @@
 # UnrealMCP
 
-AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, manage levels/maps, run Play-in-Editor sessions, and auto-layout Blueprint graphs — all through natural language.
+AI-powered control of Unreal Engine 5.6+ through the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). A hybrid Python + C++ system that lets AI assistants create Blueprints, manipulate actors, edit node graphs, manage materials, inspect properties, take viewport screenshots, manage levels/maps, run Play-in-Editor sessions, create UMG widgets, build Animation Blueprints, and debug Blueprints with breakpoints — all through natural language.
 
-**57 tools** across 11 categories, **44 Blueprint node types**, and **52 C++ command handlers**. Built for UE 5.6+.
+**75 tools** across 14 categories, **44 Blueprint node types**, and **70 C++ command handlers**. Built for UE 5.6+.
 
 ## Architecture
 
 ```
 AI Client ──stdio──> Python MCP Server ──TCP:55555──> C++ UE5 Editor Plugin
-                     (57 tools)                       (52 command handlers)
+                     (75 tools)                       (70 command handlers)
                      mcp-server/                      plugin/UnrealMCP/
 ```
 
@@ -51,21 +51,22 @@ Add to your `.claude.json` (or use `claude mcp add`):
 }
 ```
 
-## Tools (57 total)
+## Tools (75 total)
 
-### Blueprint Tools (9)
+### Blueprint Tools (10)
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `create_blueprint` | Create a new Blueprint class | `name`, `parent_class` (Actor, Pawn, Character, GameModeBase, PlayerController, ActorComponent, SceneComponent), `path` |
+| `create_blueprint` | Create a new Blueprint class or Interface | `name`, `parent_class` (Actor, Pawn, Character, GameModeBase, PlayerController, ActorComponent, SceneComponent), `path`, `blueprint_type` (Normal, Interface) |
 | `list_blueprints` | List all Blueprint assets in a directory | `path`, `recursive` |
 | `get_blueprint_info` | Get full Blueprint structure | `asset_path` → returns variables, functions, components, event graphs, parent class |
 | `compile_blueprint` | Compile with detailed error diagnostics | `asset_path` → returns status, error_count, warning_count, errors[] and warnings[] with per-node details |
 | `delete_blueprint` | Delete a Blueprint asset | `asset_path` |
-| `add_blueprint_variable` | Add a typed member variable | `asset_path`, `variable_name`, `variable_type` (Boolean, Byte, Integer, Integer64, Float, Double, String, Text, Name, Vector, Rotator, Transform, Object, Class), `default_value`, `category`, `is_instance_editable` |
+| `add_blueprint_variable` | Add a typed member variable | `asset_path`, `variable_name`, `variable_type` (Boolean, Byte, Integer, Integer64, Float, Double, String, Text, Name, Vector, Rotator, Transform, Object:ClassName, Class:ClassName, SoftObject:ClassName, Interface:ClassName), `default_value`, `category`, `is_instance_editable` |
 | `remove_blueprint_variable` | Remove a member variable | `asset_path`, `variable_name` |
 | `add_blueprint_component` | Add a component to the hierarchy | `asset_path`, `component_class` (StaticMeshComponent, BoxCollisionComponent, PointLightComponent, etc.), `component_name`, `parent_component`, `location`, `rotation`, `scale` |
 | `set_blueprint_component_defaults` | Set a default property on a BP component template (CDO) | `asset_path`, `component_name`, `property_name` (StaticMesh, CollisionProfileName, etc.), `property_value` (UE text format) |
+| `implement_interface` | Add a Blueprint Interface to a Blueprint | `asset_path`, `interface_path` |
 
 ### Node Graph Tools (9)
 
@@ -236,6 +237,38 @@ Reroute         → node_type="Knot"
 | `batch_pin_operations` | Connect pins and set values in one call | `asset_path`, `connections` [{source_node_id, source_pin, target_node_id, target_pin}], `pin_values` [{node_id, pin_name, value}] |
 | `batch_spawn_actors` | Spawn multiple actors in one call | `actors` [{actor_class, name, location, rotation, scale, blueprint_path}], `stop_on_error` |
 
+### Widget Tools (5)
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `create_widget_blueprint` | Create a UMG Widget Blueprint | `name`, `path`, `root_widget_type` (CanvasPanel, VerticalBox, etc.) |
+| `add_widget` | Add a widget to the hierarchy | `asset_path`, `widget_type` (17 types: Button, TextBlock, Image, ProgressBar, etc.), `widget_name`, `parent_name`, `slot_properties` |
+| `set_widget_property` | Set a widget property | `asset_path`, `widget_name`, `property_name`, `property_value` |
+| `get_widget_tree` | Get full widget hierarchy with properties | `asset_path` |
+| `remove_widget` | Remove a widget from the hierarchy | `asset_path`, `widget_name` |
+
+### Animation Tools (7)
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `create_anim_blueprint` | Create an Animation Blueprint | `name`, `skeleton_path`, `path` |
+| `add_anim_state` | Add a state to AnimGraph state machine | `asset_path`, `state_name`, `animation_asset` |
+| `add_anim_transition` | Add a transition between states | `asset_path`, `source_state`, `target_state`, `duration`, `blend_mode` |
+| `set_anim_transition_rule` | Set transition condition | `asset_path`, `source_state`, `target_state`, `rule_type` (auto_rule, time_remaining, bool_variable) |
+| `add_blend_space` | Create a BlendSpace asset | `name`, `skeleton_path`, `axis_x_name`, `axis_y_name`, `samples` |
+| `add_anim_montage` | Create an AnimMontage from animation | `name`, `animation_path`, `slot_name` |
+| `get_anim_graph` | Get state machine structure | `asset_path` |
+
+### Debug Tools (5)
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `set_breakpoint` | Set/toggle breakpoint on a node | `asset_path`, `node_id`, `graph_name`, `enabled` |
+| `get_breakpoints` | List all breakpoints in a Blueprint | `asset_path` → returns node_id, enabled, is_valid, graph_name |
+| `get_watch_values` | Read watched pin values (paused PIE) | `asset_path` → returns pin values, status, current_node |
+| `step_execution` | Step Blueprint debugger | `step_type` (into, over, out, resume) |
+| `get_call_stack` | Get execution trace when paused | → returns current_instruction, breakpoint_hit, trace_stack[] |
+
 ## What Can You Build With This?
 
 - **AI-assisted game prototyping** — Describe game mechanics in natural language, let the AI create Blueprints with the right nodes and connections
@@ -280,7 +313,7 @@ UnrealMCP/
       server.py                # Entry point, FastMCP setup
       connection.py            # TCP client (4-byte prefix protocol)
       tools/                   # Tool definitions by category
-        blueprint.py           #   9 Blueprint tools
+        blueprint.py           #  10 Blueprint tools
         node_graph.py          #   9 Node Graph tools
         actor.py               #   6 Actor tools
         property.py            #   5 Property tools
@@ -291,11 +324,14 @@ UnrealMCP/
         asset.py               #   5 Asset tools
         pie.py                 #   4 PIE tools
         batch.py               #   3 Batch tools
+        widget.py              #   5 Widget tools
+        anim.py                #   7 Animation tools
+        debug.py               #   5 Debug tools
   plugin/UnrealMCP/            # C++ UE5 editor plugin
     Source/UnrealMCP/
       Private/
         MCPTCPServer.cpp       # TCP listener, command dispatch, batch_execute
-        Commands/              # 52 command handlers by category
+        Commands/              # 70 command handlers by category
       Public/
         Commands/              # Header files
 ```

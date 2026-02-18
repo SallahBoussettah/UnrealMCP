@@ -12,6 +12,7 @@
 #include "Commands/MCPPIECommands.h"
 #include "Commands/MCPWidgetCommands.h"
 #include "Commands/MCPAnimCommands.h"
+#include "Commands/MCPDebugCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -402,6 +403,7 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPRemoveBlueprintVariableCommand>());
 	Register(MakeShared<FMCPAddBlueprintComponentCommand>());
 	Register(MakeShared<FMCPSetBlueprintComponentDefaultsCommand>());
+	Register(MakeShared<FMCPImplementInterfaceCommand>());
 
 	// Actor commands
 	Register(MakeShared<FMCPSpawnActorCommand>());
@@ -480,6 +482,13 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPAddBlendSpaceCommand>());
 	Register(MakeShared<FMCPAddAnimMontageCommand>());
 	Register(MakeShared<FMCPGetAnimGraphCommand>());
+
+	// Debug commands
+	Register(MakeShared<FMCPSetBreakpointCommand>());
+	Register(MakeShared<FMCPGetBreakpointsCommand>());
+	Register(MakeShared<FMCPGetWatchValuesCommand>());
+	Register(MakeShared<FMCPStepExecutionCommand>());
+	Register(MakeShared<FMCPGetCallStackCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }
