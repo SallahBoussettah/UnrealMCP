@@ -77,6 +77,12 @@
 #include "K2Node_EnhancedInputAction.h"
 #include "InputAction.h"
 
+// Subsystem getter nodes
+#include "K2Node_GetSubsystem.h"
+
+// Widget creation
+#include "Nodes/K2Node_CreateWidget.h"
+
 // For Timeline template
 #include "Engine/TimelineTemplate.h"
 
@@ -190,6 +196,12 @@ static TSharedPtr<FJsonObject> PinToJson(UEdGraphPin* Pin)
 	PinInfo->SetStringField(TEXT("type"), Pin->PinType.PinCategory.ToString());
 	PinInfo->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output"));
 	PinInfo->SetStringField(TEXT("default_value"), Pin->DefaultValue);
+
+	// Include object reference for object/class/interface pins
+	if (Pin->DefaultObject)
+	{
+		PinInfo->SetStringField(TEXT("default_object"), Pin->DefaultObject->GetPathName());
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Connections;
 	for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
@@ -332,6 +344,15 @@ TSharedPtr<FJsonObject> FMCPAddNodeCommand::Execute(const TSharedPtr<FJsonObject
 		SeqNode->NodePosY = Position.Y;
 		Graph->AddNode(SeqNode, false, false);
 		SeqNode->AllocateDefaultPins();
+
+		// Add extra output pins if requested (default is 2: then_0, then_1)
+		int32 NumOutputs = GetParamInt(Params, TEXT("num_outputs"), 2);
+		if (NumOutputs < 2) NumOutputs = 2; // minimum 2
+		for (int32 i = 2; i < NumOutputs; ++i)
+		{
+			SeqNode->AddInputPin();
+		}
+
 		NewNode = SeqNode;
 	}
 	else if (NodeType == TEXT("VariableGet"))
@@ -339,8 +360,19 @@ TSharedPtr<FJsonObject> FMCPAddNodeCommand::Execute(const TSharedPtr<FJsonObject
 		FString VarName = GetParamString(Params, TEXT("variable_name"));
 		if (VarName.IsEmpty()) return ErrorResponse(TEXT("variable_name is required for VariableGet"));
 
+		FString TargetClassName = GetParamString(Params, TEXT("target_class"));
+
 		UK2Node_VariableGet* GetNode = NewObject<UK2Node_VariableGet>(Graph);
-		GetNode->VariableReference.SetSelfMember(FName(*VarName));
+		if (TargetClassName.IsEmpty())
+		{
+			GetNode->VariableReference.SetSelfMember(FName(*VarName));
+		}
+		else
+		{
+			UClass* TargetClass = FindClassByName(TargetClassName);
+			if (!TargetClass) return ErrorResponse(FString::Printf(TEXT("Target class not found: %s"), *TargetClassName));
+			GetNode->VariableReference.SetExternalMember(FName(*VarName), TargetClass);
+		}
 		GetNode->NodePosX = Position.X;
 		GetNode->NodePosY = Position.Y;
 		Graph->AddNode(GetNode, false, false);
@@ -352,8 +384,19 @@ TSharedPtr<FJsonObject> FMCPAddNodeCommand::Execute(const TSharedPtr<FJsonObject
 		FString VarName = GetParamString(Params, TEXT("variable_name"));
 		if (VarName.IsEmpty()) return ErrorResponse(TEXT("variable_name is required for VariableSet"));
 
+		FString TargetClassName = GetParamString(Params, TEXT("target_class"));
+
 		UK2Node_VariableSet* SetNode = NewObject<UK2Node_VariableSet>(Graph);
-		SetNode->VariableReference.SetSelfMember(FName(*VarName));
+		if (TargetClassName.IsEmpty())
+		{
+			SetNode->VariableReference.SetSelfMember(FName(*VarName));
+		}
+		else
+		{
+			UClass* TargetClass = FindClassByName(TargetClassName);
+			if (!TargetClass) return ErrorResponse(FString::Printf(TEXT("Target class not found: %s"), *TargetClassName));
+			SetNode->VariableReference.SetExternalMember(FName(*VarName), TargetClass);
+		}
 		SetNode->NodePosX = Position.X;
 		SetNode->NodePosY = Position.Y;
 		Graph->AddNode(SetNode, false, false);
@@ -740,6 +783,50 @@ TSharedPtr<FJsonObject> FMCPAddNodeCommand::Execute(const TSharedPtr<FJsonObject
 		AddCompNode->AllocateDefaultPins();
 		NewNode = AddCompNode;
 	}
+	else if (NodeType == TEXT("CreateWidget"))
+	{
+		UK2Node_CreateWidget* WidgetNode = NewObject<UK2Node_CreateWidget>(Graph);
+		WidgetNode->NodePosX = Position.X;
+		WidgetNode->NodePosY = Position.Y;
+		Graph->AddNode(WidgetNode, false, false);
+		WidgetNode->AllocateDefaultPins();
+
+		// Auto-set the WidgetType class pin if widget_class is provided
+		FString WidgetClass = GetParamString(Params, TEXT("widget_class"));
+		if (!WidgetClass.IsEmpty())
+		{
+			// Try loading directly first, then with _C suffix for Blueprint classes
+			UClass* TheClass = LoadObject<UClass>(nullptr, *WidgetClass);
+			if (!TheClass && !WidgetClass.EndsWith(TEXT("_C")))
+			{
+				// Extract object name and append _C: /Game/UI/WBP_Test -> /Game/UI/WBP_Test.WBP_Test_C
+				FString BasePath = WidgetClass;
+				FString ObjectName;
+				if (!WidgetClass.Contains(TEXT(".")))
+				{
+					int32 LastSlash;
+					if (WidgetClass.FindLastChar('/', LastSlash))
+					{
+						ObjectName = WidgetClass.Mid(LastSlash + 1);
+						BasePath = WidgetClass + TEXT(".") + ObjectName + TEXT("_C");
+					}
+				}
+				TheClass = LoadObject<UClass>(nullptr, *BasePath);
+			}
+
+			if (TheClass)
+			{
+				UEdGraphPin* ClassPin = WidgetNode->GetClassPin();
+				if (ClassPin)
+				{
+					ClassPin->DefaultObject = TheClass;
+					WidgetNode->PinDefaultValueChanged(ClassPin);
+				}
+			}
+		}
+
+		NewNode = WidgetNode;
+	}
 
 	// ========================================================================
 	// DELEGATES
@@ -963,11 +1050,57 @@ TSharedPtr<FJsonObject> FMCPAddNodeCommand::Execute(const TSharedPtr<FJsonObject
 		InputNode->NodePosY = Position.Y;
 		Graph->AddNode(InputNode, false, false);
 		InputNode->AllocateDefaultPins();
+
+		// Auto-split the ActionValue struct pin for Axis2D/3D so callers get individual X, Y, Z pins
+		UEdGraphPin* ActionValuePin = InputNode->FindPin(TEXT("ActionValue"));
+		if (ActionValuePin && ActionValuePin->PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
+		{
+			const UEdGraphSchema_K2* K2Schema = CastChecked<const UEdGraphSchema_K2>(Graph->GetSchema());
+			K2Schema->SplitPin(ActionValuePin, false);
+		}
+
 		NewNode = InputNode;
+	}
+
+	// ========================================================================
+	// SUBSYSTEM GETTERS
+	// ========================================================================
+
+	else if (NodeType == TEXT("GetSubsystemFromPC"))
+	{
+		FString SubsystemClassName = GetParamString(Params, TEXT("subsystem_class"));
+		if (SubsystemClassName.IsEmpty()) return ErrorResponse(TEXT("subsystem_class is required for GetSubsystemFromPC (e.g. 'EnhancedInputLocalPlayerSubsystem')"));
+
+		UClass* SubsystemClass = FindClassByName(SubsystemClassName);
+		if (!SubsystemClass) return ErrorResponse(FString::Printf(TEXT("Subsystem class not found: %s"), *SubsystemClassName));
+
+		UK2Node_GetSubsystemFromPC* SubsystemNode = NewObject<UK2Node_GetSubsystemFromPC>(Graph);
+		SubsystemNode->Initialize(SubsystemClass);
+		SubsystemNode->NodePosX = Position.X;
+		SubsystemNode->NodePosY = Position.Y;
+		Graph->AddNode(SubsystemNode, false, false);
+		SubsystemNode->AllocateDefaultPins();
+		NewNode = SubsystemNode;
+	}
+	else if (NodeType == TEXT("GetSubsystem"))
+	{
+		FString SubsystemClassName = GetParamString(Params, TEXT("subsystem_class"));
+		if (SubsystemClassName.IsEmpty()) return ErrorResponse(TEXT("subsystem_class is required for GetSubsystem (e.g. 'CommonSessionSubsystem')"));
+
+		UClass* SubsystemClass = FindClassByName(SubsystemClassName);
+		if (!SubsystemClass) return ErrorResponse(FString::Printf(TEXT("Subsystem class not found: %s"), *SubsystemClassName));
+
+		UK2Node_GetSubsystem* SubsystemNode = NewObject<UK2Node_GetSubsystem>(Graph);
+		SubsystemNode->Initialize(SubsystemClass);
+		SubsystemNode->NodePosX = Position.X;
+		SubsystemNode->NodePosY = Position.Y;
+		Graph->AddNode(SubsystemNode, false, false);
+		SubsystemNode->AllocateDefaultPins();
+		NewNode = SubsystemNode;
 	}
 	else
 	{
-		return ErrorResponse(FString::Printf(TEXT("Unsupported node type: %s. Supported types: CallFunction, Event, CustomEvent, Branch, Sequence, VariableGet, VariableSet, Self, MacroInstance, MultiGate, Select, DoOnceMultiInput, ForEachElementInEnum, SwitchInteger, SwitchString, SwitchEnum, SwitchName, DynamicCast, ClassDynamicCast, MakeStruct, BreakStruct, SetFieldsInStruct, MakeArray, MakeMap, MakeSet, GetArrayItem, SpawnActorFromClass, GenericCreateObject, AddComponentByClass, CreateDelegate, AddDelegate, RemoveDelegate, CallDelegate, ClearDelegate, FormatText, EnumLiteral, Timeline, Knot, LoadAsset, EaseFunction, GetClassDefaults, GetDataTableRow, CommutativeAssociativeBinaryOperator, EnhancedInputAction"), *NodeType));
+		return ErrorResponse(FString::Printf(TEXT("Unsupported node type: %s. Supported types: CallFunction, Event, CustomEvent, Branch, Sequence, VariableGet, VariableSet, Self, MacroInstance, MultiGate, Select, DoOnceMultiInput, ForEachElementInEnum, SwitchInteger, SwitchString, SwitchEnum, SwitchName, DynamicCast, ClassDynamicCast, MakeStruct, BreakStruct, SetFieldsInStruct, MakeArray, MakeMap, MakeSet, GetArrayItem, SpawnActorFromClass, GenericCreateObject, AddComponentByClass, CreateWidget, CreateDelegate, AddDelegate, RemoveDelegate, CallDelegate, ClearDelegate, FormatText, EnumLiteral, Timeline, Knot, LoadAsset, EaseFunction, GetClassDefaults, GetDataTableRow, CommutativeAssociativeBinaryOperator, EnhancedInputAction, GetSubsystemFromPC, GetSubsystem"), *NodeType));
 	}
 
 	if (!NewNode) return ErrorResponse(TEXT("Failed to create node"));
@@ -1018,7 +1151,72 @@ TSharedPtr<FJsonObject> FMCPConnectPinsCommand::Execute(const TSharedPtr<FJsonOb
 	const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
 	bool bSuccess = Schema->TryCreateConnection(SourcePin, TargetPin);
 
-	if (!bSuccess) return ErrorResponse(TEXT("Failed to create connection - pins may be incompatible"));
+	// If the standard connection failed, try swapped order
+	if (!bSuccess)
+	{
+		bSuccess = Schema->TryCreateConnection(TargetPin, SourcePin);
+	}
+
+	// If still failed, try MakeLinkTo fallback for compatible pin types
+	// that TryCreateConnection rejects (e.g., Object -> Interface)
+	if (!bSuccess)
+	{
+		UEdGraphPin* OutPin = nullptr;
+		UEdGraphPin* InPin = nullptr;
+
+		if (SourcePin->Direction == EGPD_Output && TargetPin->Direction == EGPD_Input)
+		{
+			OutPin = SourcePin;
+			InPin = TargetPin;
+		}
+		else if (SourcePin->Direction == EGPD_Input && TargetPin->Direction == EGPD_Output)
+		{
+			OutPin = TargetPin;
+			InPin = SourcePin;
+		}
+
+		if (OutPin && InPin)
+		{
+			bool bCanForceConnect = false;
+
+			// Object -> Interface: valid when the object class implements the interface
+			if (OutPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object &&
+				InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Interface)
+			{
+				bCanForceConnect = true;
+			}
+			// Interface -> Object: also valid in the reverse direction
+			else if (OutPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Interface &&
+				InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object)
+			{
+				bCanForceConnect = true;
+			}
+			// Same category pins that TryCreateConnection somehow rejected
+			else if (OutPin->PinType.PinCategory == InPin->PinType.PinCategory)
+			{
+				bCanForceConnect = true;
+			}
+
+			if (bCanForceConnect)
+			{
+				OutPin->MakeLinkTo(InPin);
+				bSuccess = true;
+			}
+		}
+	}
+
+	if (!bSuccess)
+	{
+		// Return detailed error with pin type info for debugging
+		FPinConnectionResponse Response = Schema->CanCreateConnection(SourcePin, TargetPin);
+		return ErrorResponse(FString::Printf(
+			TEXT("Failed to connect pins - %s (Source: %s [%s], Target: %s [%s])"),
+			*Response.Message.ToString(),
+			*SourcePin->PinName.ToString(),
+			*SourcePin->PinType.PinCategory.ToString(),
+			*TargetPin->PinName.ToString(),
+			*TargetPin->PinType.PinCategory.ToString()));
+	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
 	return SuccessResponse(TEXT("Pins connected successfully"));
@@ -1117,8 +1315,48 @@ TSharedPtr<FJsonObject> FMCPSetPinValueCommand::Execute(const TSharedPtr<FJsonOb
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("MCP Set Pin Value")));
 
-	const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
-	Schema->TrySetDefaultValue(*Pin, Value);
+	// Check if this is an object/class/interface pin that needs DefaultObject
+	const FName& PinCategory = Pin->PinType.PinCategory;
+	bool bIsObjectPin = (PinCategory == UEdGraphSchema_K2::PC_Object
+		|| PinCategory == UEdGraphSchema_K2::PC_SoftObject
+		|| PinCategory == UEdGraphSchema_K2::PC_Interface
+		|| PinCategory == UEdGraphSchema_K2::PC_Class
+		|| PinCategory == UEdGraphSchema_K2::PC_SoftClass);
+
+	if (bIsObjectPin)
+	{
+		if (Value.IsEmpty() || Value == TEXT("None") || Value == TEXT("null"))
+		{
+			// Clear the object reference
+			Pin->DefaultObject = nullptr;
+			Pin->DefaultValue = TEXT("");
+		}
+		else
+		{
+			// Try to load the object from the asset path
+			UObject* Object = StaticLoadObject(UObject::StaticClass(), nullptr, *Value);
+			if (!Object)
+			{
+				// Try appending the asset name: /Game/Path/Name -> /Game/Path/Name.Name
+				FString AssetName = FPaths::GetCleanFilename(Value);
+				FString FullPath = Value + TEXT(".") + AssetName;
+				Object = StaticLoadObject(UObject::StaticClass(), nullptr, *FullPath);
+			}
+			if (!Object)
+			{
+				return ErrorResponse(FString::Printf(TEXT("Could not load object for pin '%s': %s"), *PinName, *Value));
+			}
+			Pin->DefaultObject = Object;
+			Pin->DefaultValue = TEXT("");
+		}
+		// Notify the node that the pin value changed
+		Pin->GetOwningNode()->PinDefaultValueChanged(Pin);
+	}
+	else
+	{
+		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+		Schema->TrySetDefaultValue(*Pin, Value);
+	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
 	return SuccessResponse(FString::Printf(TEXT("Set pin '%s' = '%s'"), *PinName, *Value));
@@ -1390,14 +1628,21 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString GraphName = Params->GetStringField(TEXT("graph_name"));
 
-	int32 HSpacing = 350;
-	int32 VSpacing = 200;
-	int32 SubgraphSpacing = 400;
+	// Tunable spacing parameters
+	int32 HSpacing = 400;         // horizontal gap between consecutive exec nodes
+	int32 BranchGap = 200;        // vertical gap when a branch creates a new row
+	int32 SubgraphGap = 150;      // visual gap between subgraph bounding boxes
+	int32 DataXOffset = 160;      // how far left of consumer for data nodes
+	int32 DataYOffset = 60;       // how far below consumer for data nodes
+	int32 DataVGap = 35;          // stacking gap for multiple data nodes
+	int32 EstNodeHeight = 100;    // estimated rendered height for bounding box
 
 	double TempVal;
 	if (Params->TryGetNumberField(TEXT("horizontal_spacing"), TempVal)) HSpacing = static_cast<int32>(TempVal);
-	if (Params->TryGetNumberField(TEXT("vertical_spacing"), TempVal)) VSpacing = static_cast<int32>(TempVal);
-	if (Params->TryGetNumberField(TEXT("subgraph_spacing"), TempVal)) SubgraphSpacing = static_cast<int32>(TempVal);
+	if (Params->TryGetNumberField(TEXT("branch_gap"), TempVal)) BranchGap = static_cast<int32>(TempVal);
+	if (Params->TryGetNumberField(TEXT("subgraph_gap"), TempVal)) SubgraphGap = static_cast<int32>(TempVal);
+	if (Params->TryGetNumberField(TEXT("data_x_offset"), TempVal)) DataXOffset = static_cast<int32>(TempVal);
+	if (Params->TryGetNumberField(TEXT("data_y_offset"), TempVal)) DataYOffset = static_cast<int32>(TempVal);
 
 	UBlueprint* BP = LoadBP(AssetPath);
 	if (!BP) return ErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
@@ -1409,20 +1654,27 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("MCP Arrange Nodes")));
 
-	// Phase 0: Classify nodes as exec-flow or data-only
+	// === Classify nodes as exec-flow or data-only ===
 	TArray<UEdGraphNode*> ExecNodes;
+	TSet<UEdGraphNode*> ExecNodeSet;
 	TArray<UEdGraphNode*> DataOnlyNodes;
+	TSet<UEdGraphNode*> DataNodeSet;
 
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
 		if (NodeHasExecPins(Node))
+		{
 			ExecNodes.Add(Node);
+			ExecNodeSet.Add(Node);
+		}
 		else
+		{
 			DataOnlyNodes.Add(Node);
+			DataNodeSet.Add(Node);
+		}
 	}
 
-	// Phase 1: Build adjacency via exec output pins (exec node → exec node)
-	// Maps each exec node to its exec successors
+	// === Build exec adjacency ===
 	TMap<UEdGraphNode*, TArray<UEdGraphNode*>> ExecSuccessors;
 	TMap<UEdGraphNode*, TArray<UEdGraphNode*>> ExecPredecessors;
 	for (UEdGraphNode* Node : ExecNodes)
@@ -1438,7 +1690,7 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 			for (UEdGraphPin* LinkedPin : OutPin->LinkedTo)
 			{
 				UEdGraphNode* Successor = LinkedPin->GetOwningNode();
-				if (ExecSuccessors.Contains(Successor))
+				if (ExecNodeSet.Contains(Successor))
 				{
 					ExecSuccessors[Node].AddUnique(Successor);
 					ExecPredecessors[Successor].AddUnique(Node);
@@ -1447,159 +1699,172 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 		}
 	}
 
-	// Phase 2: Find root nodes (exec nodes with no exec input connections)
+	// === Find roots (no exec input connections) ===
 	TArray<UEdGraphNode*> Roots;
 	for (UEdGraphNode* Node : ExecNodes)
 	{
 		if (!HasExecInputConnections(Node))
 			Roots.Add(Node);
 	}
-
-	// If no roots found (cycle), pick the first exec node as root
 	if (Roots.Num() == 0 && ExecNodes.Num() > 0)
 		Roots.Add(ExecNodes[0]);
 
-	// Phase 3: BFS from roots, assign layers using longest-path
-	TMap<UEdGraphNode*, int32> NodeLayer;
-	for (UEdGraphNode* Node : ExecNodes)
-		NodeLayer.Add(Node, -1);
+	// === PASS 1: DFS chain placement per subgraph (local coords) ===
+	// Each subgraph stores its nodes with local (x,y) positions
+	struct FSubgraphData
+	{
+		FString Name;
+		TMap<UEdGraphNode*, FVector2D> LocalPositions;
+	};
+	TArray<FSubgraphData> SubgraphList;
+	TSet<UEdGraphNode*> PlacedExec;
 
-	// Process each root separately to identify subgraphs
-	TArray<TArray<UEdGraphNode*>> Subgraphs; // Each subgraph is a list of nodes in BFS order
-	TSet<UEdGraphNode*> Visited;
+	// DFS: linear chains stay horizontal, branches create new rows
+	auto PlaceExecChain = [&](UEdGraphNode* Root) -> FSubgraphData
+	{
+		FSubgraphData SG;
+		SG.Name = Root->GetNodeTitle(ENodeTitleType::ListView).ToString();
+
+		TFunction<int32(UEdGraphNode*, int32, int32)> PlaceChain;
+		PlaceChain = [&](UEdGraphNode* Node, int32 Col, int32 Y) -> int32
+		{
+			if (PlacedExec.Contains(Node)) return Y;
+			PlacedExec.Add(Node);
+			SG.LocalPositions.Add(Node, FVector2D(Col * HSpacing, Y));
+			int32 BottomY = Y;
+
+			TArray<UEdGraphNode*> Children;
+			for (UEdGraphNode* C : ExecSuccessors[Node])
+			{
+				if (!PlacedExec.Contains(C))
+					Children.Add(C);
+			}
+
+			if (Children.Num() == 0) return BottomY;
+
+			// First child continues on same row
+			BottomY = PlaceChain(Children[0], Col + 1, Y);
+
+			// Additional children are branches, place below
+			for (int32 i = 1; i < Children.Num(); ++i)
+			{
+				if (!PlacedExec.Contains(Children[i]))
+				{
+					int32 BranchY = BottomY + BranchGap;
+					BottomY = PlaceChain(Children[i], Col + 1, BranchY);
+				}
+			}
+			return BottomY;
+		};
+
+		PlaceChain(Root, 0, 0);
+		return SG;
+	};
 
 	for (UEdGraphNode* Root : Roots)
 	{
-		if (Visited.Contains(Root)) continue;
-
-		TArray<UEdGraphNode*> SubgraphNodes;
-		TQueue<UEdGraphNode*> Queue;
-		Queue.Enqueue(Root);
-		Visited.Add(Root);
-		NodeLayer[Root] = 0;
-
-		while (!Queue.IsEmpty())
-		{
-			UEdGraphNode* Current;
-			Queue.Dequeue(Current);
-			SubgraphNodes.Add(Current);
-
-			int32 CurrentLayer = NodeLayer[Current];
-			for (UEdGraphNode* Successor : ExecSuccessors[Current])
-			{
-				// Longest-path: always try to push successor further right
-				int32 NewLayer = CurrentLayer + 1;
-				if (NewLayer > NodeLayer[Successor])
-				{
-					NodeLayer[Successor] = NewLayer;
-				}
-
-				if (!Visited.Contains(Successor))
-				{
-					Visited.Add(Successor);
-					Queue.Enqueue(Successor);
-				}
-			}
-		}
-
-		Subgraphs.Add(SubgraphNodes);
+		if (PlacedExec.Contains(Root)) continue;
+		SubgraphList.Add(PlaceExecChain(Root));
 	}
 
-	// Handle orphaned exec nodes (not reachable from any root)
+	// Orphan exec nodes
 	for (UEdGraphNode* Node : ExecNodes)
 	{
-		if (!Visited.Contains(Node))
-		{
-			NodeLayer[Node] = 0;
-			TArray<UEdGraphNode*> OrphanSubgraph;
-			OrphanSubgraph.Add(Node);
-			Subgraphs.Add(OrphanSubgraph);
-			Visited.Add(Node);
-		}
+		if (!PlacedExec.Contains(Node))
+			SubgraphList.Add(PlaceExecChain(Node));
 	}
 
-	// Helper: estimate node height from pin count
-	auto EstimateNodeHeight = [](UEdGraphNode* Node) -> int32
-	{
-		int32 NumPins = Node ? Node->Pins.Num() : 0;
-		// Header ~50px + ~26px per pin, minimum 80px
-		return FMath::Max(80, 50 + NumPins * 26);
-	};
-
-	// Phase 4: Group nodes by subgraph + layer
-	// Phase 5: Assign positions — layers = X columns, vertical stacking within layer
-	int32 GlobalYOffset = 0;
-
-	// Track which data-only nodes we place (to avoid placing them twice)
+	// === PASS 2: Recursive data node placement per subgraph (local coords) ===
 	TSet<UEdGraphNode*> PlacedDataNodes;
 
-	for (int32 SubIdx = 0; SubIdx < Subgraphs.Num(); ++SubIdx)
+	auto GetDataInputs = [&](UEdGraphNode* Node) -> TArray<UEdGraphNode*>
 	{
-		const TArray<UEdGraphNode*>& SubgraphNodes = Subgraphs[SubIdx];
-
-		// Group by layer
-		TMap<int32, TArray<UEdGraphNode*>> LayerToNodes;
-		int32 MaxLayer = 0;
-		for (UEdGraphNode* Node : SubgraphNodes)
+		TArray<UEdGraphNode*> Result;
+		for (UEdGraphPin* Pin : Node->Pins)
 		{
-			int32 Layer = NodeLayer[Node];
-			LayerToNodes.FindOrAdd(Layer).Add(Node);
-			if (Layer > MaxLayer) MaxLayer = Layer;
-		}
-
-		// Place exec nodes — track per-column Y cursor for accurate stacking
-		int32 SubgraphMaxY = GlobalYOffset;
-		for (int32 Layer = 0; Layer <= MaxLayer; ++Layer)
-		{
-			TArray<UEdGraphNode*>* NodesInLayer = LayerToNodes.Find(Layer);
-			if (!NodesInLayer) continue;
-
-			int32 LayerY = GlobalYOffset;
-			for (int32 Idx = 0; Idx < NodesInLayer->Num(); ++Idx)
+			if (Pin->Direction != EGPD_Input) continue;
+			if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
+			for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
 			{
-				UEdGraphNode* Node = (*NodesInLayer)[Idx];
-				Node->NodePosX = Layer * HSpacing;
-				Node->NodePosY = LayerY;
-
-				int32 NodeHeight = EstimateNodeHeight(Node);
-				LayerY += NodeHeight + VSpacing;
-			}
-			if (LayerY > SubgraphMaxY) SubgraphMaxY = LayerY;
-		}
-
-		// Phase 6: Place data-only nodes near their consumers within this subgraph
-		for (UEdGraphNode* Node : SubgraphNodes)
-		{
-			for (UEdGraphPin* InputPin : Node->Pins)
-			{
-				if (InputPin->Direction != EGPD_Input) continue;
-				if (InputPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
-
-				for (UEdGraphPin* LinkedPin : InputPin->LinkedTo)
-				{
-					UEdGraphNode* DataNode = LinkedPin->GetOwningNode();
-					if (!DataNode) continue;
-					if (PlacedDataNodes.Contains(DataNode)) continue;
-					if (!DataOnlyNodes.Contains(DataNode)) continue;
-
-					// Place data node to the left and below its consumer
-					DataNode->NodePosX = Node->NodePosX - (HSpacing / 2);
-					DataNode->NodePosY = SubgraphMaxY;
-					SubgraphMaxY += EstimateNodeHeight(DataNode) + VSpacing;
-					PlacedDataNodes.Add(DataNode);
-				}
+				UEdGraphNode* DN = LinkedPin->GetOwningNode();
+				if (DN && DataNodeSet.Contains(DN) && !PlacedDataNodes.Contains(DN))
+					Result.AddUnique(DN);
 			}
 		}
+		return Result;
+	};
 
-		GlobalYOffset = SubgraphMaxY + SubgraphSpacing;
+	TFunction<void(UEdGraphNode*, TMap<UEdGraphNode*, FVector2D>&)> PlaceDataTree;
+	PlaceDataTree = [&](UEdGraphNode* Node, TMap<UEdGraphNode*, FVector2D>& LocalPos)
+	{
+		TArray<UEdGraphNode*> DataInputs = GetDataInputs(Node);
+		if (DataInputs.Num() == 0) return;
+
+		FVector2D ParentPos = LocalPos[Node];
+		int32 DY = static_cast<int32>(ParentPos.Y) + DataYOffset;
+		for (UEdGraphNode* DN : DataInputs)
+		{
+			LocalPos.Add(DN, FVector2D(ParentPos.X - DataXOffset, DY));
+			PlacedDataNodes.Add(DN);
+			DY += DataVGap;
+			PlaceDataTree(DN, LocalPos);
+		}
+	};
+
+	for (FSubgraphData& SG : SubgraphList)
+	{
+		// Sort exec nodes left-to-right for deterministic data placement
+		TArray<UEdGraphNode*> ExecByX;
+		for (auto& Pair : SG.LocalPositions)
+		{
+			if (ExecNodeSet.Contains(Pair.Key))
+				ExecByX.Add(Pair.Key);
+		}
+		ExecByX.Sort([&SG](UEdGraphNode* A, UEdGraphNode* B)
+		{
+			return SG.LocalPositions[A].X < SG.LocalPositions[B].X;
+		});
+
+		for (UEdGraphNode* Node : ExecByX)
+			PlaceDataTree(Node, SG.LocalPositions);
 	}
 
-	// Place remaining data-only nodes that aren't connected to any exec node
+	// === PASS 3: Stack subgraphs using actual bounding boxes ===
+	int32 CurrentY = 0;
+	int32 NumSubgraphs = SubgraphList.Num();
+
+	for (FSubgraphData& SG : SubgraphList)
+	{
+		if (SG.LocalPositions.Num() == 0) continue;
+
+		// Calculate local bounding box
+		int32 MinY = TNumericLimits<int32>::Max();
+		int32 MaxY = TNumericLimits<int32>::Min();
+		for (auto& Pair : SG.LocalPositions)
+		{
+			int32 LY = static_cast<int32>(Pair.Value.Y);
+			if (LY < MinY) MinY = LY;
+			if (LY > MaxY) MaxY = LY;
+		}
+		int32 BBoxHeight = (MaxY - MinY) + EstNodeHeight;
+
+		// Shift to global position
+		int32 YShift = CurrentY - MinY;
+		for (auto& Pair : SG.LocalPositions)
+		{
+			UEdGraphNode* Node = Pair.Key;
+			Node->NodePosX = static_cast<int32>(Pair.Value.X);
+			Node->NodePosY = static_cast<int32>(Pair.Value.Y) + YShift;
+		}
+
+		CurrentY += BBoxHeight + SubgraphGap;
+	}
+
+	// === Place remaining orphaned data nodes ===
 	for (UEdGraphNode* DataNode : DataOnlyNodes)
 	{
 		if (PlacedDataNodes.Contains(DataNode)) continue;
 
-		// Try to place near the first consumer of any kind
 		bool bPlaced = false;
 		for (UEdGraphPin* OutputPin : DataNode->Pins)
 		{
@@ -1609,9 +1874,8 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 				UEdGraphNode* Consumer = LinkedPin->GetOwningNode();
 				if (Consumer)
 				{
-					DataNode->NodePosX = Consumer->NodePosX - (HSpacing / 2);
-					DataNode->NodePosY = GlobalYOffset;
-					GlobalYOffset += EstimateNodeHeight(DataNode) + VSpacing;
+					DataNode->NodePosX = Consumer->NodePosX - DataXOffset;
+					DataNode->NodePosY = Consumer->NodePosY + DataYOffset;
 					bPlaced = true;
 					break;
 				}
@@ -1622,20 +1886,20 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 		if (!bPlaced)
 		{
 			DataNode->NodePosX = 0;
-			DataNode->NodePosY = GlobalYOffset;
-			GlobalYOffset += EstimateNodeHeight(DataNode) + VSpacing;
+			DataNode->NodePosY = CurrentY;
+			CurrentY += 200;
 		}
 		PlacedDataNodes.Add(DataNode);
 	}
 
-	// Phase 7: Build result JSON with new positions
+	// === Build result JSON ===
 	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetNumberField(TEXT("nodes_arranged"), Graph->Nodes.Num());
 	Data->SetNumberField(TEXT("exec_nodes"), ExecNodes.Num());
 	Data->SetNumberField(TEXT("data_nodes"), DataOnlyNodes.Num());
-	Data->SetNumberField(TEXT("subgraphs"), Subgraphs.Num());
+	Data->SetNumberField(TEXT("subgraphs"), NumSubgraphs);
 
 	TArray<TSharedPtr<FJsonValue>> Positions;
 	for (UEdGraphNode* Node : Graph->Nodes)
@@ -1650,4 +1914,48 @@ TSharedPtr<FJsonObject> FMCPArrangeNodesCommand::Execute(const TSharedPtr<FJsonO
 	Data->SetArrayField(TEXT("positions"), Positions);
 
 	return SuccessResponse(Data);
+}
+
+TSharedPtr<FJsonObject> FMCPSetNodePositionsCommand::Execute(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+
+	UBlueprint* BP = LoadBP(AssetPath);
+	if (!BP) return ErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	UEdGraph* Graph = FindGraph(BP, GraphName);
+	if (!Graph) return ErrorResponse(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	const TArray<TSharedPtr<FJsonValue>>* PosArray;
+	if (!Params->TryGetArrayField(TEXT("positions"), PosArray))
+		return ErrorResponse(TEXT("Missing 'positions' array"));
+
+	FScopedTransaction Transaction(FText::FromString(TEXT("MCP Set Node Positions")));
+
+	// Build node lookup by GUID
+	TMap<FString, UEdGraphNode*> NodeMap;
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		NodeMap.Add(Node->NodeGuid.ToString(), Node);
+	}
+
+	int32 Count = 0;
+	for (const TSharedPtr<FJsonValue>& Val : *PosArray)
+	{
+		const TSharedPtr<FJsonObject>& PosObj = Val->AsObject();
+		if (!PosObj) continue;
+
+		FString NodeId = PosObj->GetStringField(TEXT("node_id"));
+		UEdGraphNode** Found = NodeMap.Find(NodeId);
+		if (!Found) continue;
+
+		double X, Y;
+		if (PosObj->TryGetNumberField(TEXT("x"), X)) (*Found)->NodePosX = static_cast<int32>(X);
+		if (PosObj->TryGetNumberField(TEXT("y"), Y)) (*Found)->NodePosY = static_cast<int32>(Y);
+		Count++;
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+	return SuccessResponse(FString::Printf(TEXT("Set positions for %d nodes"), Count));
 }

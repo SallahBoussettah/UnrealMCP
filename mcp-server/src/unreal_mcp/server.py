@@ -21,6 +21,7 @@ from .tools.anim import register_anim_tools
 from .tools.debug import register_debug_tools
 from .tools.datatable import register_datatable_tools
 from .tools.input import register_input_tools
+from .tools.audio import register_audio_tools
 
 # Configure logging
 logging.basicConfig(
@@ -42,7 +43,8 @@ mcp = FastMCP(
         "Animation Blueprint/state machine/blend space/montage creation, "
         "Blueprint debugging (breakpoints, stepping, watch values, call stack), "
         "DataTable editing (create, read, modify, delete rows, CSV import), "
-        "and Enhanced Input setup (create InputActions/InputMappingContexts, configure key mappings with modifiers/triggers)."
+        "Enhanced Input setup (create InputActions/InputMappingContexts, configure key mappings with modifiers/triggers), "
+        "and Audio/Sound Cue creation (create Sound Cues with Random/Modulator nodes and wave players)."
     ),
 )
 
@@ -63,6 +65,7 @@ register_anim_tools(mcp)
 register_debug_tools(mcp)
 register_datatable_tools(mcp)
 register_input_tools(mcp)
+register_audio_tools(mcp)
 
 logger.info("UnrealMCP server initialized with all tools registered")
 

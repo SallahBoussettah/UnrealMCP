@@ -81,3 +81,11 @@ public:
 	virtual TSharedPtr<FJsonObject> Execute(const TSharedPtr<FJsonObject>& Params) override;
 	virtual FString GetCommandName() const override { return TEXT("implement_interface"); }
 };
+
+// --- Remove Blueprint Component ---
+class FMCPRemoveBlueprintComponentCommand : public FMCPCommandBase
+{
+public:
+	virtual TSharedPtr<FJsonObject> Execute(const TSharedPtr<FJsonObject>& Params) override;
+	virtual FString GetCommandName() const override { return TEXT("remove_blueprint_component"); }
+};

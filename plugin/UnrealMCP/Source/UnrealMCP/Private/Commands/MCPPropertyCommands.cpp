@@ -5,6 +5,7 @@
 #include "EngineUtils.h"
 #include "UObject/UnrealType.h"
 #include "ScopedTransaction.h"
+#include "Components/PrimitiveComponent.h"
 
 namespace PropertyCommandsLocal
 {
@@ -59,7 +60,7 @@ TSharedPtr<FJsonObject> FMCPGetObjectPropertiesCommand::Execute(const TSharedPtr
 	FString CategoryFilter = Params->GetStringField(TEXT("category_filter"));
 
 	// Try to find as actor first
-	UObject* Object = FindActorByName(ObjectPath);
+	UObject* Object = PropertyCommandsLocal::FindActorByName(ObjectPath);
 
 	// Try as asset path
 	if (!Object)
@@ -102,7 +103,7 @@ TSharedPtr<FJsonObject> FMCPSetObjectPropertyCommand::Execute(const TSharedPtr<F
 	FString PropertyName = Params->GetStringField(TEXT("property_name"));
 	FString PropertyValue = Params->GetStringField(TEXT("property_value"));
 
-	UObject* Object = FindActorByName(ObjectPath);
+	UObject* Object = PropertyCommandsLocal::FindActorByName(ObjectPath);
 	if (!Object)
 	{
 		Object = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath);
@@ -112,27 +113,81 @@ TSharedPtr<FJsonObject> FMCPSetObjectPropertyCommand::Execute(const TSharedPtr<F
 		return ErrorResponse(FString::Printf(TEXT("Object not found: %s"), *ObjectPath));
 	}
 
-	FProperty* Prop = Object->GetClass()->FindPropertyByName(FName(*PropertyName));
+	// Resolve property — support dot-notation for nested struct properties (e.g. "BodyInstance.CollisionProfileName")
+	FProperty* Prop = nullptr;
+	void* ContainerPtr = Object;
+
+	if (PropertyName.Contains(TEXT(".")))
+	{
+		TArray<FString> PropertyChain;
+		PropertyName.ParseIntoArray(PropertyChain, TEXT("."), true);
+
+		UStruct* CurrentStruct = Object->GetClass();
+		void* CurrentPtr = Object;
+
+		for (int32 i = 0; i < PropertyChain.Num(); ++i)
+		{
+			FProperty* ChainProp = CurrentStruct->FindPropertyByName(*PropertyChain[i]);
+			if (!ChainProp)
+			{
+				return ErrorResponse(FString::Printf(TEXT("Property '%s' not found in chain '%s' on %s"),
+					*PropertyChain[i], *PropertyName, *Object->GetClass()->GetName()));
+			}
+
+			if (i == PropertyChain.Num() - 1)
+			{
+				Prop = ChainProp;
+				ContainerPtr = CurrentPtr;
+			}
+			else
+			{
+				FStructProperty* StructProp = CastField<FStructProperty>(ChainProp);
+				if (!StructProp)
+				{
+					return ErrorResponse(FString::Printf(TEXT("'%s' is not a struct property, cannot navigate further in '%s'"),
+						*PropertyChain[i], *PropertyName));
+				}
+				CurrentPtr = StructProp->ContainerPtrToValuePtr<void>(CurrentPtr);
+				CurrentStruct = StructProp->Struct;
+			}
+		}
+	}
+	else
+	{
+		Prop = Object->GetClass()->FindPropertyByName(FName(*PropertyName));
+	}
+
 	if (!Prop)
 	{
 		return ErrorResponse(FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *Object->GetClass()->GetName()));
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("MCP Set Property")));
+	Object->Modify();
 	Object->PreEditChange(Prop);
 
-	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Object);
+	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(ContainerPtr);
 	FString OldValue = PropertyValueToString(Prop, ValuePtr);
 
-	Prop->ImportText_Direct(*PropertyValue, ValuePtr, Object, PPF_None);
+	if (!Prop->ImportText_Direct(*PropertyValue, ValuePtr, Object, PPF_None))
+	{
+		return ErrorResponse(FString::Printf(TEXT("Failed to set '%s' to '%s' (ImportText_Direct failed). Check value format for type '%s'."),
+			*PropertyName, *PropertyValue, *Prop->GetCPPType()));
+	}
 
-	FPropertyChangedEvent ChangedEvent(Prop);
+	FPropertyChangedEvent ChangedEvent(Prop, EPropertyChangeType::ValueSet);
 	Object->PostEditChangeProperty(ChangedEvent);
+
+	// Mark package dirty to ensure level save persists the change
+	Object->MarkPackageDirty();
+
+	// Re-read the value to confirm it was actually persisted in memory
+	FString ActualNewValue = PropertyValueToString(Prop, ValuePtr);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("property"), PropertyName);
 	Data->SetStringField(TEXT("old_value"), OldValue);
-	Data->SetStringField(TEXT("new_value"), PropertyValue);
+	Data->SetStringField(TEXT("new_value"), ActualNewValue);
 	return SuccessResponse(Data);
 }
 
@@ -141,7 +196,7 @@ TSharedPtr<FJsonObject> FMCPGetComponentHierarchyCommand::Execute(const TSharedP
 {
 	FString ActorName = Params->GetStringField(TEXT("actor_name"));
 
-	AActor* Actor = FindActorByName(ActorName);
+	AActor* Actor = PropertyCommandsLocal::FindActorByName(ActorName);
 	if (!Actor)
 	{
 		return ErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
@@ -231,7 +286,7 @@ TSharedPtr<FJsonObject> FMCPSetComponentPropertyCommand::Execute(const TSharedPt
 	FString PropertyName = Params->GetStringField(TEXT("property_name"));
 	FString PropertyValue = Params->GetStringField(TEXT("property_value"));
 
-	AActor* Actor = FindActorByName(ActorName);
+	AActor* Actor = PropertyCommandsLocal::FindActorByName(ActorName);
 	if (!Actor)
 	{
 		return ErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
@@ -251,23 +306,109 @@ TSharedPtr<FJsonObject> FMCPSetComponentPropertyCommand::Execute(const TSharedPt
 
 	if (!Component)
 	{
-		return ErrorResponse(FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *ComponentName, *ActorName));
+		// Build list of available components for error message
+		TArray<FString> AvailableNames;
+		for (UActorComponent* Comp : Components)
+		{
+			AvailableNames.Add(Comp->GetName());
+		}
+		return ErrorResponse(FString::Printf(TEXT("Component '%s' not found on actor '%s'. Available: [%s]"),
+			*ComponentName, *ActorName, *FString::Join(AvailableNames, TEXT(", "))));
 	}
 
-	FProperty* Prop = Component->GetClass()->FindPropertyByName(FName(*PropertyName));
+	// Special case: CollisionProfileName on primitive components (stored in BodyInstance struct)
+	if (PropertyName == TEXT("CollisionProfileName") || PropertyName == TEXT("BodyInstance.CollisionProfileName"))
+	{
+		UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Component);
+		if (!PrimComp)
+		{
+			return ErrorResponse(FString::Printf(TEXT("Component '%s' is not a PrimitiveComponent, cannot set CollisionProfileName"), *ComponentName));
+		}
+		FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("MCP: Set %s.CollisionProfileName = %s"), *ComponentName, *PropertyValue)));
+		Component->Modify();
+		PrimComp->SetCollisionProfileName(FName(*PropertyValue));
+		Actor->MarkPackageDirty();
+
+		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+		Data->SetStringField(TEXT("component"), ComponentName);
+		Data->SetStringField(TEXT("property"), TEXT("CollisionProfileName"));
+		Data->SetStringField(TEXT("value"), PropertyValue);
+		return SuccessResponse(Data);
+	}
+
+	// Resolve property — support dot-notation for nested struct properties (e.g. "BodyInstance.bNotifyRigidBodyCollision")
+	FProperty* Prop = nullptr;
+	void* ContainerPtr = Component;
+
+	if (PropertyName.Contains(TEXT(".")))
+	{
+		TArray<FString> PropertyChain;
+		PropertyName.ParseIntoArray(PropertyChain, TEXT("."), true);
+
+		UStruct* CurrentStruct = Component->GetClass();
+		void* CurrentPtr = Component;
+
+		for (int32 i = 0; i < PropertyChain.Num(); ++i)
+		{
+			FProperty* ChainProp = CurrentStruct->FindPropertyByName(*PropertyChain[i]);
+			if (!ChainProp)
+			{
+				return ErrorResponse(FString::Printf(TEXT("Property '%s' not found in chain '%s' on component '%s' (class: %s)"),
+					*PropertyChain[i], *PropertyName, *ComponentName, *Component->GetClass()->GetName()));
+			}
+
+			if (i == PropertyChain.Num() - 1)
+			{
+				Prop = ChainProp;
+				ContainerPtr = CurrentPtr;
+			}
+			else
+			{
+				FStructProperty* StructProp = CastField<FStructProperty>(ChainProp);
+				if (!StructProp)
+				{
+					return ErrorResponse(FString::Printf(TEXT("'%s' is not a struct property, cannot navigate further in '%s'"),
+						*PropertyChain[i], *PropertyName));
+				}
+				CurrentPtr = StructProp->ContainerPtrToValuePtr<void>(CurrentPtr);
+				CurrentStruct = StructProp->Struct;
+			}
+		}
+	}
+	else
+	{
+		Prop = Component->GetClass()->FindPropertyByName(FName(*PropertyName));
+	}
+
 	if (!Prop)
 	{
-		return ErrorResponse(FString::Printf(TEXT("Property '%s' not found on component '%s'"), *PropertyName, *ComponentName));
+		return ErrorResponse(FString::Printf(TEXT("Property '%s' not found on component '%s' (class: %s)"),
+			*PropertyName, *ComponentName, *Component->GetClass()->GetName()));
 	}
 
-	FScopedTransaction Transaction(FText::FromString(TEXT("MCP Set Component Property")));
+	FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("MCP: Set %s.%s = %s"), *ComponentName, *PropertyName, *PropertyValue)));
+	Component->Modify();
 	Component->PreEditChange(Prop);
 
-	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Component);
-	Prop->ImportText_Direct(*PropertyValue, ValuePtr, Component, PPF_None);
+	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(ContainerPtr);
+	FString OldValue = PropertyValueToString(Prop, ValuePtr);
 
-	FPropertyChangedEvent ChangedEvent(Prop);
+	if (!Prop->ImportText_Direct(*PropertyValue, ValuePtr, Component, PPF_None))
+	{
+		return ErrorResponse(FString::Printf(TEXT("Failed to set '%s' to '%s' (ImportText_Direct failed). Check value format for type '%s'."),
+			*PropertyName, *PropertyValue, *Prop->GetCPPType()));
+	}
+
+	FPropertyChangedEvent ChangedEvent(Prop, EPropertyChangeType::ValueSet);
 	Component->PostEditChangeProperty(ChangedEvent);
+	Actor->MarkPackageDirty();
 
-	return SuccessResponse(FString::Printf(TEXT("Set %s.%s = %s"), *ComponentName, *PropertyName, *PropertyValue));
+	FString ActualNewValue = PropertyValueToString(Prop, ValuePtr);
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("component"), ComponentName);
+	Data->SetStringField(TEXT("property"), PropertyName);
+	Data->SetStringField(TEXT("old_value"), OldValue);
+	Data->SetStringField(TEXT("new_value"), ActualNewValue);
+	return SuccessResponse(Data);
 }

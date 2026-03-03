@@ -58,26 +58,38 @@ def register_batch_tools(mcp: FastMCP) -> None:
             "commands": commands,
             "stop_on_error": stop_on_error,
         })
-        if not result.get("success"):
-            return f"Error: {result.get('error', 'Unknown error')}"
 
         data = result.get("data", {})
+        if not data:
+            # No data at all — a transport or protocol error
+            return f"Error: {result.get('error', 'Unknown error')}"
+
         results = data.get("results", [])
 
         # Extract node_ids from each sub-result
         node_ids = []
+        errors = []
         for r in results:
             if r.get("success") and r.get("data"):
                 node_ids.append(r["data"].get("node_id"))
             else:
                 node_ids.append(None)
+                idx = r.get("index", "?")
+                cmd = r.get("command", "?")
+                err = r.get("error", "unknown")
+                errors.append(f"[{idx}] {cmd}: {err}")
 
-        return str({
+        output = {
             "node_ids": node_ids,
             "total": data.get("total", len(commands)),
             "executed": data.get("executed", 0),
             "results": results,
-        })
+        }
+        if errors:
+            output["errors"] = errors
+            output["error_summary"] = f"{len(errors)} of {len(commands)} nodes failed"
+
+        return str(output)
 
     @mcp.tool()
     async def batch_pin_operations(
@@ -152,10 +164,26 @@ def register_batch_tools(mcp: FastMCP) -> None:
             "commands": commands,
             "stop_on_error": stop_on_error,
         })
-        if not result.get("success"):
+
+        data = result.get("data", {})
+        if not data:
             return f"Error: {result.get('error', 'Unknown error')}"
 
-        return str(result.get("data", {}))
+        # Surface per-operation errors if any failed
+        if not result.get("success"):
+            results = data.get("results", [])
+            errors = []
+            for r in results:
+                if not r.get("success"):
+                    idx = r.get("index", "?")
+                    cmd = r.get("command", "?")
+                    err = r.get("error", "unknown")
+                    errors.append(f"[{idx}] {cmd}: {err}")
+            if errors:
+                data["errors"] = errors
+                data["error_summary"] = f"{len(errors)} operations failed"
+
+        return str(data)
 
     @mcp.tool()
     async def batch_spawn_actors(
@@ -202,14 +230,16 @@ def register_batch_tools(mcp: FastMCP) -> None:
             "commands": commands,
             "stop_on_error": stop_on_error,
         })
-        if not result.get("success"):
-            return f"Error: {result.get('error', 'Unknown error')}"
 
         data = result.get("data", {})
+        if not data:
+            return f"Error: {result.get('error', 'Unknown error')}"
+
         results = data.get("results", [])
 
         # Extract spawned actor info from each sub-result
         spawned_actors = []
+        errors = []
         for r in results:
             if r.get("success") and r.get("data"):
                 spawned_actors.append({
@@ -218,10 +248,19 @@ def register_batch_tools(mcp: FastMCP) -> None:
                 })
             else:
                 spawned_actors.append(None)
+                idx = r.get("index", "?")
+                cmd = r.get("command", "?")
+                err = r.get("error", "unknown")
+                errors.append(f"[{idx}] {cmd}: {err}")
 
-        return str({
+        output = {
             "spawned_actors": spawned_actors,
             "total": data.get("total", len(commands)),
             "executed": data.get("executed", 0),
             "results": results,
-        })
+        }
+        if errors:
+            output["errors"] = errors
+            output["error_summary"] = f"{len(errors)} of {len(commands)} actors failed"
+
+        return str(output)

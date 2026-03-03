@@ -15,6 +15,7 @@
 #include "Commands/MCPDebugCommands.h"
 #include "Commands/MCPDataTableCommands.h"
 #include "Commands/MCPInputCommands.h"
+#include "Commands/MCPAudioCommands.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
@@ -376,6 +377,28 @@ TSharedPtr<FJsonObject> FMCPTCPServer::ProcessBatchCommand(const TSharedPtr<FJso
 
 	TSharedPtr<FJsonObject> Response = MakeShared<FJsonObject>();
 	Response->SetBoolField(TEXT("success"), bAllSucceeded);
+
+	if (!bAllSucceeded)
+	{
+		// Build a summary error with indices and messages of failed operations
+		TArray<FString> FailedDetails;
+		for (const auto& ResultVal : Results)
+		{
+			const TSharedPtr<FJsonObject>* ResultObj = nullptr;
+			if (ResultVal->TryGetObject(ResultObj) && ResultObj && !(*ResultObj)->GetBoolField(TEXT("success")))
+			{
+				int32 Idx = (int32)(*ResultObj)->GetNumberField(TEXT("index"));
+				FString Cmd = (*ResultObj)->GetStringField(TEXT("command"));
+				FString Err = (*ResultObj)->GetStringField(TEXT("error"));
+				FailedDetails.Add(FString::Printf(TEXT("[%d] %s: %s"), Idx, *Cmd, *Err));
+			}
+		}
+		int32 FailCount = FailedDetails.Num();
+		FString Summary = FString::Printf(TEXT("%d of %d commands failed: %s"),
+			FailCount, CommandsArr->Num(), *FString::Join(FailedDetails, TEXT("; ")));
+		Response->SetStringField(TEXT("error"), Summary);
+	}
+
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetArrayField(TEXT("results"), Results);
 	Data->SetNumberField(TEXT("total"), CommandsArr->Num());
@@ -406,6 +429,7 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPAddBlueprintComponentCommand>());
 	Register(MakeShared<FMCPSetBlueprintComponentDefaultsCommand>());
 	Register(MakeShared<FMCPImplementInterfaceCommand>());
+	Register(MakeShared<FMCPRemoveBlueprintComponentCommand>());
 
 	// Actor commands
 	Register(MakeShared<FMCPSpawnActorCommand>());
@@ -432,6 +456,7 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPCreateFunctionCommand>());
 	Register(MakeShared<FMCPDeleteFunctionCommand>());
 	Register(MakeShared<FMCPArrangeNodesCommand>());
+	Register(MakeShared<FMCPSetNodePositionsCommand>());
 
 	// Viewport commands
 	Register(MakeShared<FMCPTakeScreenshotCommand>());
@@ -506,6 +531,10 @@ void FMCPTCPServer::RegisterCommands()
 	Register(MakeShared<FMCPAddInputMappingCommand>());
 	Register(MakeShared<FMCPRemoveInputMappingCommand>());
 	Register(MakeShared<FMCPGetInputMappingContextCommand>());
+
+	// Audio commands
+	Register(MakeShared<FMCPCreateSoundCueCommand>());
+	Register(MakeShared<FMCPGetSoundCueInfoCommand>());
 
 	UE_LOG(LogTemp, Log, TEXT("UnrealMCP: Registered %d command handlers"), CommandHandlers.Num());
 }

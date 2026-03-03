@@ -18,7 +18,7 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
         node_position: list[float] | None = None,
         params: dict | None = None,
     ) -> str:
-        """Add a node to a Blueprint graph. Supports 43 node types.
+        """Add a node to a Blueprint graph. Supports 48 node types.
 
         Args:
             asset_path: Blueprint asset path (e.g. '/Game/Blueprints/BP_MyActor')
@@ -46,7 +46,7 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
 
         === FLOW CONTROL (7) ===
         - 'Branch' - If/else (no params needed)
-        - 'Sequence' - Execution sequence (no params needed)
+        - 'Sequence' - Execution sequence. Optional params: {"num_outputs": 4} (default 2)
         - 'MultiGate' - Multiple execution outputs (no params needed)
         - 'Select' - Select value by index (no params needed)
         - 'DoOnceMultiInput' - Multi-input do once (no params needed)
@@ -78,10 +78,13 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
         - 'MakeSet' - Make set (no params needed)
         - 'GetArrayItem' - Get array element by index (no params needed)
 
-        === SPAWNING & OBJECTS (3) ===
+        === SPAWNING & OBJECTS (4) ===
         - 'SpawnActorFromClass' - Spawn Actor from Class (set class via pin)
         - 'GenericCreateObject' - Construct Object from Class (set class via pin)
         - 'AddComponentByClass' - Add Component by Class (set class via pin)
+        - 'CreateWidget' - Create Widget node. Optional params: {"widget_class": "/Game/UI/WBP_MyWidget"}
+            Auto-sets the WidgetType class pin. Accepts full class path with _C suffix
+            or Blueprint path (auto-appends _C). Pins: OwningPlayer, ReturnValue.
 
         === DELEGATES (5) ===
         - 'CreateDelegate' - Create delegate binding (no params needed)
@@ -104,6 +107,21 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
         - 'CommutativeAssociativeBinaryOperator' - Expandable math op.
             Requires function_name and target_class, like CallFunction.
             Example: function_name='Add_FloatFloat', target_class='KismetMathLibrary'
+
+        === ENHANCED INPUT (1) ===
+        - 'EnhancedInputAction' - Enhanced Input Action event node.
+            params: {"input_action_path": "/Game/Input/IA_Look"}
+            Creates a node that fires on the specified input action with pins for
+            Triggered, Started, Completed, Canceled, and ActionValue output.
+
+        === SUBSYSTEM GETTERS (2) ===
+        - 'GetSubsystemFromPC' - Get a LocalPlayer subsystem from a PlayerController.
+            params: {"subsystem_class": "EnhancedInputLocalPlayerSubsystem"}
+            Pure node (no exec pins). Returns the correctly-typed subsystem.
+            Connect a PlayerController to the input, get the subsystem from the output.
+        - 'GetSubsystem' - Get a GameInstance/World/LocalPlayer subsystem.
+            params: {"subsystem_class": "CommonSessionSubsystem"}
+            Pure node. Uses WorldContext to find the subsystem.
 
         Returns:
             JSON with created node ID, class, title, position, and pin information
@@ -132,8 +150,13 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
     ) -> str:
         """Connect two pins between nodes in a Blueprint graph.
 
+        Supports all standard pin connections including cross-type connections
+        like Object to Interface pins (e.g., PlayerController -> IEnhancedInputSubsystemInterface).
+        Uses TryCreateConnection first, then falls back to direct MakeLinkTo for compatible
+        cross-type connections that the schema rejects.
+
         Args:
-            asset_path: Blueprint asset path
+            asset_path: Blueprint asset path (e.g. '/Game/Blueprints/BP_MyActor')
             source_node_id: ID of the source node (output side)
             source_pin_name: Name of the output pin on the source node
             target_node_id: ID of the target node (input side)
@@ -141,7 +164,7 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
             graph_name: Name of the graph containing the nodes
 
         Returns:
-            Connection result
+            Connection result. On failure, includes detailed pin type info for debugging.
         """
         result = await send_command("connect_pins", {
             "asset_path": asset_path,
@@ -317,22 +340,22 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
     async def arrange_graph(
         asset_path: str,
         graph_name: str = "EventGraph",
-        horizontal_spacing: int = 350,
-        vertical_spacing: int = 200,
-        subgraph_spacing: int = 400,
+        horizontal_spacing: int = 400,
+        branch_gap: int = 200,
+        subgraph_gap: int = 150,
     ) -> str:
-        """Auto-layout all nodes in a Blueprint graph using a layered graph algorithm.
+        """Auto-layout all nodes in a Blueprint graph.
 
-        Arranges exec-flow nodes left-to-right in layers (BFS from roots), then
-        places data-only nodes (VariableGet, Self, etc.) near their consumers.
-        Disconnected subgraphs are stacked vertically.
+        Uses DFS chain-based placement: linear exec chains stay on one horizontal
+        row, branches create new rows below, data nodes cascade left+down from
+        consumers. Subgraphs are stacked vertically with bounding-box spacing.
 
         Args:
             asset_path: Blueprint asset path (e.g. '/Game/Blueprints/BP_MyActor')
             graph_name: Name of the graph to arrange (default: 'EventGraph')
-            horizontal_spacing: Pixels between layers/columns (default: 350)
-            vertical_spacing: Pixels between nodes in the same layer (default: 200)
-            subgraph_spacing: Pixels between disconnected subgraphs (default: 400)
+            horizontal_spacing: Pixels between consecutive exec nodes (default: 400)
+            branch_gap: Vertical gap when a branch creates a new row (default: 200)
+            subgraph_gap: Visual gap between subgraph bounding boxes (default: 150)
 
         Returns:
             JSON with count of arranged nodes, subgraphs found, and new positions
@@ -341,8 +364,33 @@ def register_node_graph_tools(mcp: FastMCP) -> None:
             "asset_path": asset_path,
             "graph_name": graph_name,
             "horizontal_spacing": horizontal_spacing,
-            "vertical_spacing": vertical_spacing,
-            "subgraph_spacing": subgraph_spacing,
+            "branch_gap": branch_gap,
+            "subgraph_gap": subgraph_gap,
+        })
+        if not result.get("success"):
+            return f"Error: {result.get('error', 'Unknown error')}"
+        return str(result.get("data", {}))
+
+    @mcp.tool()
+    async def set_node_positions(
+        asset_path: str,
+        positions: list,
+        graph_name: str = "EventGraph",
+    ) -> str:
+        """Set explicit X/Y positions for nodes in a Blueprint graph.
+
+        Args:
+            asset_path: Blueprint asset path (e.g. '/Game/Blueprints/BP_MyActor')
+            positions: Array of {node_id, x, y} objects
+            graph_name: Name of the graph (default: 'EventGraph')
+
+        Returns:
+            Count of nodes repositioned
+        """
+        result = await send_command("set_node_positions", {
+            "asset_path": asset_path,
+            "graph_name": graph_name,
+            "positions": positions,
         })
         if not result.get("success"):
             return f"Error: {result.get('error', 'Unknown error')}"

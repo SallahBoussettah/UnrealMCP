@@ -676,6 +676,34 @@ TSharedPtr<FJsonObject> FMCPSetWidgetPropertyCommand::Execute(const TSharedPtr<F
 			return ErrorResponse(TEXT("BackgroundColor is only valid for Button"));
 		}
 	}
+	else if (PropertyName == TEXT("BrushColor"))
+	{
+		if (UBorder* Border = Cast<UBorder>(Widget))
+		{
+			TArray<FString> Parts;
+			PropertyValue.ParseIntoArray(Parts, TEXT(","));
+			if (Parts.Num() >= 3)
+			{
+				FLinearColor Color(
+					FCString::Atof(*Parts[0].TrimStartAndEnd()),
+					FCString::Atof(*Parts[1].TrimStartAndEnd()),
+					FCString::Atof(*Parts[2].TrimStartAndEnd()),
+					Parts.Num() >= 4 ? FCString::Atof(*Parts[3].TrimStartAndEnd()) : 1.0f
+				);
+				Border->SetBrushColor(Color);
+				bSuccess = true;
+				ResultInfo = FString::Printf(TEXT("BrushColor = %s"), *Color.ToString());
+			}
+			else
+			{
+				return ErrorResponse(TEXT("BrushColor requires at least 3 comma-separated values (R,G,B[,A])"));
+			}
+		}
+		else
+		{
+			return ErrorResponse(TEXT("BrushColor is only valid for Border widgets"));
+		}
+	}
 	// ---- ProgressBar properties ----
 	else if (PropertyName == TEXT("Percent"))
 	{

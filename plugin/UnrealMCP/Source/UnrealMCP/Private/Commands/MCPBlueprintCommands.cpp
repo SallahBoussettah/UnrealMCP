@@ -17,6 +17,9 @@
 #include "UObject/SavePackage.h"
 #include "Logging/TokenizedMessage.h"
 #include "Components/PrimitiveComponent.h"
+#include "Editor.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 
 namespace BlueprintCommandsLocal
 {
@@ -56,6 +59,89 @@ static UClass* FindClassByName(const FString& ClassName)
 	}
 
 	return nullptr;
+}
+// Propagate a property change from an SCS template to all existing instances in the editor world
+static int32 PropagatePropertyToInstances(UBlueprint* BP, const FString& ComponentName, const FString& PropertyName, const FString& PropertyValue)
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World || !BP->GeneratedClass) return 0;
+
+	int32 Count = 0;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (!It->IsA(BP->GeneratedClass)) continue;
+
+		// Find matching component on the instance
+		UActorComponent* Comp = nullptr;
+		TInlineComponentArray<UActorComponent*> Comps;
+		It->GetComponents(Comps);
+		for (UActorComponent* C : Comps)
+		{
+			if (C->GetName() == ComponentName || C->GetName().StartsWith(ComponentName + TEXT("_")))
+			{
+				Comp = C;
+				break;
+			}
+		}
+		if (!Comp) continue;
+
+		// Special case: CollisionProfileName
+		if (PropertyName == TEXT("CollisionProfileName") || PropertyName == TEXT("BodyInstance.CollisionProfileName"))
+		{
+			if (UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Comp))
+			{
+				PrimComp->SetCollisionProfileName(FName(*PropertyValue));
+				Count++;
+			}
+			continue;
+		}
+
+		// General property resolution with dot-notation
+		FProperty* Prop = nullptr;
+		void* ContainerPtr = Comp;
+
+		if (PropertyName.Contains(TEXT(".")))
+		{
+			TArray<FString> PropertyChain;
+			PropertyName.ParseIntoArray(PropertyChain, TEXT("."), true);
+
+			UStruct* CurrentStruct = Comp->GetClass();
+			void* CurrentPtr = Comp;
+
+			for (int32 i = 0; i < PropertyChain.Num(); ++i)
+			{
+				FProperty* ChainProp = CurrentStruct->FindPropertyByName(*PropertyChain[i]);
+				if (!ChainProp) break;
+
+				if (i == PropertyChain.Num() - 1)
+				{
+					Prop = ChainProp;
+					ContainerPtr = CurrentPtr;
+				}
+				else
+				{
+					FStructProperty* StructProp = CastField<FStructProperty>(ChainProp);
+					if (!StructProp) break;
+					CurrentPtr = StructProp->ContainerPtrToValuePtr<void>(CurrentPtr);
+					CurrentStruct = StructProp->Struct;
+				}
+			}
+		}
+		else
+		{
+			Prop = Comp->GetClass()->FindPropertyByName(*PropertyName);
+		}
+
+		if (Prop)
+		{
+			void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(ContainerPtr);
+			if (Prop->ImportText_Direct(*PropertyValue, ValuePtr, Comp, PPF_None))
+			{
+				Count++;
+			}
+		}
+	}
+	return Count;
 }
 } // namespace BlueprintCommandsLocal
 
@@ -697,14 +783,21 @@ TSharedPtr<FJsonObject> FMCPSetBlueprintComponentDefaultsCommand::Execute(const 
 	FPropertyChangedEvent ChangeEvent(Property);
 	ComponentTemplate->PostEditChangeProperty(ChangeEvent);
 
-	// Mark the blueprint as modified so it recompiles with the new defaults
+	// Mark the blueprint as modified and compile to trigger reinstancing
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+	FKismetEditorUtilities::CompileBlueprint(BP);
+
+	// Propagate the property change to all existing instances in the editor world
+	// This ensures already-placed instances pick up the new value (reinstancing alone
+	// may not propagate certain properties like collision settings)
+	int32 InstancesUpdated = PropagatePropertyToInstances(BP, ComponentName, PropertyName, PropertyValue);
 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetStringField(TEXT("component_name"), ComponentName);
 	Data->SetStringField(TEXT("property_name"), PropertyName);
 	Data->SetStringField(TEXT("property_value"), PropertyValue);
 	Data->SetStringField(TEXT("component_class"), ComponentTemplate->GetClass()->GetName());
+	Data->SetNumberField(TEXT("instances_updated"), InstancesUpdated);
 	return SuccessResponse(Data);
 }
 
@@ -759,5 +852,78 @@ TSharedPtr<FJsonObject> FMCPImplementInterfaceCommand::Execute(const TSharedPtr<
 	Data->SetStringField(TEXT("blueprint"), BP->GetName());
 	Data->SetStringField(TEXT("interface"), InterfaceBP->GetName());
 	Data->SetStringField(TEXT("interface_class"), InterfaceBP->GeneratedClass->GetPathName());
+	return SuccessResponse(Data);
+}
+
+// --- Remove Blueprint Component ---
+TSharedPtr<FJsonObject> FMCPRemoveBlueprintComponentCommand::Execute(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString ComponentName = Params->GetStringField(TEXT("component_name"));
+	bool bPromoteChildren = false;
+	Params->TryGetBoolField(TEXT("promote_children"), bPromoteChildren);
+
+	if (ComponentName.IsEmpty())
+	{
+		return ErrorResponse(TEXT("component_name is required"));
+	}
+
+	UBlueprint* BP = LoadBlueprintFromPath(AssetPath);
+	if (!BP)
+	{
+		return ErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	if (!BP->SimpleConstructionScript)
+	{
+		return ErrorResponse(TEXT("Blueprint does not have a SimpleConstructionScript (not an Actor-based BP?)"));
+	}
+
+	// Find the SCS node by component variable name
+	USCS_Node* TargetNode = nullptr;
+	for (USCS_Node* Node : BP->SimpleConstructionScript->GetAllNodes())
+	{
+		if (Node->GetVariableName().ToString() == ComponentName)
+		{
+			TargetNode = Node;
+			break;
+		}
+	}
+
+	if (!TargetNode)
+	{
+		TArray<FString> AvailableNames;
+		for (USCS_Node* Node : BP->SimpleConstructionScript->GetAllNodes())
+		{
+			AvailableNames.Add(Node->GetVariableName().ToString());
+		}
+		return ErrorResponse(FString::Printf(TEXT("Component '%s' not found in SCS. Available: [%s]"),
+			*ComponentName, *FString::Join(AvailableNames, TEXT(", "))));
+	}
+
+	// Collect info before removal
+	FString ComponentClass = TargetNode->ComponentClass ? TargetNode->ComponentClass->GetName() : TEXT("None");
+	int32 ChildCount = TargetNode->GetChildNodes().Num();
+
+	FScopedTransaction Transaction(FText::FromString(FString::Printf(TEXT("MCP: Remove Component %s"), *ComponentName)));
+
+	if (bPromoteChildren)
+	{
+		// Promote children to the parent before removing this node
+		BP->SimpleConstructionScript->RemoveNodeAndPromoteChildren(TargetNode);
+	}
+	else
+	{
+		// Remove the node and all its children
+		BP->SimpleConstructionScript->RemoveNode(TargetNode);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("removed_component"), ComponentName);
+	Data->SetStringField(TEXT("component_class"), ComponentClass);
+	Data->SetBoolField(TEXT("children_promoted"), bPromoteChildren);
+	Data->SetNumberField(TEXT("child_count"), ChildCount);
 	return SuccessResponse(Data);
 }

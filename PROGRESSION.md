@@ -2,13 +2,13 @@
 
 ## Current State
 
-**86 MCP tools** | **81 C++ command handlers** | **44 Blueprint node types** | **16 categories**
+**87 MCP tools** | **82 C++ command handlers** | **45 Blueprint node types** | **16 categories**
 
 ### Completed Categories
 
 | Category | Tools | Status |
 |----------|-------|--------|
-| Blueprint | 10 | Done |
+| Blueprint | 11 | Done |
 | Node Graph | 9 | Done |
 | Actor | 6 | Done |
 | Property | 5 | Done |
@@ -33,6 +33,16 @@
 - **Cannot create Interface Message call nodes** - e.g. "Interact (Message)" targeting BPI_Interactable
 - **Cannot create Interface Event nodes** - e.g. Event Interact (from interface) must be added manually
 - **OnComponentBeginOverlap / OnComponentEndOverlap** delegate bindings had to be added manually
+
+### Fixed (v0.9) — NEEDS TEST
+- ~~set_object_property not persisting Blueprint instance variables~~ - Fixed: added `Modify()`, `EPropertyChangeType::ValueSet`, `MarkPackageDirty()`, ImportText return check, dot-notation support
+- ~~SCS template changes not propagating to existing instances~~ - Fixed: `set_blueprint_component_defaults` now compiles + propagates to all instances in editor world
+- ~~set_component_property cannot find collision properties~~ - Fixed: added dot-notation for nested structs + `CollisionProfileName` special case
+- ~~Cannot remove Blueprint components~~ - Fixed: new `remove_blueprint_component` tool with optional child promotion
+- ~~Sequence node limited to 2 output pins~~ - Fixed: `num_outputs` param on Sequence node type
+- ~~Border BrushColor not settable~~ - Fixed: `BrushColor` property handler in `set_widget_property`
+- ~~batch_add_nodes returns "Unknown error"~~ - Fixed: C++ adds summary error, Python surfaces per-operation errors
+- ~~Create Widget node WidgetType pin empty~~ - Fixed: new `CreateWidget` node type with `widget_class` param auto-sets class pin
 
 ### Fixed (v0.8)
 - ~~Float variables created as Integer~~ - Fixed: uses PC_Real + PC_Float sub-category

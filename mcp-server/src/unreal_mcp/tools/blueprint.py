@@ -228,6 +228,33 @@ def register_blueprint_tools(mcp: FastMCP) -> None:
         return str(result.get("data", {}))
 
     @mcp.tool()
+    async def remove_blueprint_component(
+        asset_path: str,
+        component_name: str,
+        promote_children: bool = False,
+    ) -> str:
+        """Remove a component from a Blueprint's SCS (Simple Construction Script) hierarchy.
+
+        Args:
+            asset_path: Blueprint asset path (e.g., '/Game/Blueprints/BP_MyActor.BP_MyActor')
+            component_name: Name of the component variable to remove (as shown in the Blueprint editor)
+            promote_children: If True, child components are re-parented to the removed component's
+                parent instead of being deleted. If False (default), the component and all its
+                children are removed.
+
+        Returns:
+            JSON with removed_component, component_class, children_promoted, child_count
+        """
+        result = await send_command("remove_blueprint_component", {
+            "asset_path": asset_path,
+            "component_name": component_name,
+            "promote_children": promote_children,
+        })
+        if not result.get("success"):
+            return f"Error: {result.get('error', 'Unknown error')}"
+        return str(result.get("data", {}))
+
+    @mcp.tool()
     async def set_blueprint_component_defaults(
         asset_path: str,
         component_name: str,

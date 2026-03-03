@@ -40,16 +40,19 @@ def register_property_tools(mcp: FastMCP) -> None:
         property_name: str,
         property_value: str,
     ) -> str:
-        """Set a property value on a UObject (triggers PreEditChange/PostEditChange for proper editor behavior).
+        """Set a property value on a UObject — works on placed Blueprint instances, actors, and assets.
+
+        Properly persists per-instance variable overrides on placed Blueprint actors
+        (e.g., setting a custom String or Integer variable on a specific instance).
 
         Args:
-            object_path: Path to the object (actor name or asset path)
-            property_name: Name of the property to modify (supports dot-notation for nested properties,
-                e.g., 'RelativeLocation.X')
+            object_path: Path to the object (actor name/label or asset path)
+            property_name: Name of the property to modify. Supports dot-notation for nested
+                struct properties (e.g., 'BodyInstance.CollisionProfileName', 'RelativeLocation.X')
             property_value: New value as string (will be parsed according to the property type)
 
         Returns:
-            Result with old and new values
+            JSON with property name, old_value, and new_value (re-read after set to confirm persistence)
         """
         result = await send_command("set_object_property", {
             "object_path": object_path,
@@ -101,16 +104,20 @@ def register_property_tools(mcp: FastMCP) -> None:
         property_name: str,
         property_value: str,
     ) -> str:
-        """Set a property on a specific component of an actor.
+        """Set a property on a specific component of a placed actor instance.
+
+        Supports dot-notation for nested struct properties (e.g., 'BodyInstance.bNotifyRigidBodyCollision').
+        Has special handling for CollisionProfileName on PrimitiveComponents — use either
+        'CollisionProfileName' or 'BodyInstance.CollisionProfileName' to set collision profiles.
 
         Args:
-            actor_name: Name of the actor
-            component_name: Name of the component
-            property_name: Property to modify
+            actor_name: Name or label of the actor
+            component_name: Name of the component (use get_component_hierarchy to list them)
+            property_name: Property to modify. Supports dot-notation for nested structs.
             property_value: New value as string
 
         Returns:
-            Result with old and new values
+            JSON with component, property, old_value, and new_value
         """
         result = await send_command("set_component_property", {
             "actor_name": actor_name,

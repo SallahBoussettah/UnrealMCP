@@ -222,5 +222,25 @@ bool FBPConnector::ArePinsCompatible(UEdGraphPin* SourcePin, UEdGraphPin* Target
         return false;
     }
 
-    return SourcePin->PinType.PinCategory == TargetPin->PinType.PinCategory;
+    // Exact category match
+    if (SourcePin->PinType.PinCategory == TargetPin->PinType.PinCategory)
+    {
+        return true;
+    }
+
+    // Object -> Interface (valid when the object class implements the interface)
+    if (SourcePin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object &&
+        TargetPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Interface)
+    {
+        return true;
+    }
+
+    // Interface -> Object
+    if (SourcePin->PinType.PinCategory == UEdGraphSchema_K2::PC_Interface &&
+        TargetPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object)
+    {
+        return true;
+    }
+
+    return false;
 }
